@@ -102,7 +102,7 @@ These issues mainly arise from the different techniques required for live previe
 ## Planned Features
 
 - [x] Selectable color themes
-- [ ] More/better ways to apply color
+- [x] More/better ways to apply color
 	- [x] Submenu in editor context menu
     - [ ] Suggester modal
  - [x] Changing color through interactive delimiter
