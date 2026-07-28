@@ -31,6 +31,22 @@ Color text sections using the following syntax:
 
 The id maps to one of the color formats provided by the current active theme, which can be selected in the settings.
 
+#### Literal colors
+
+Instead of an id you can also write a hex color directly, for one-off colors you do not want to define in a theme:
+
+```
+~={#ff8800} This text uses a literal color =~
+~={#0f8}    Short form works too =~
+~={#ff880080} So does an alpha channel =~
+```
+
+Literal colors are applied as an inline style rather than through a CSS class, so they need no theme entry and work in any note regardless of the active theme. They carry the color only: bold, italics, caps and lines are per-id options and still have to come from a theme color.
+
+Ids always win, so a theme color keeps working even if it is named like a hex string.
+
+The `Apply custom color (hex)` command, and the `Custom...` entry in the right click *Color* submenu, open a color picker that inserts the literal color for you.
+
 The formatting options include:
 
 - $\textsf{{\color[rgb]{1.0, 0.0, 0.0}T}{\color[rgb]{1.0, 0.5, 0.0}e}{\color[rgb]{1.0, 1.0, 0.0}x}{\color[rgb]{0.0, 1.0, 0.0}t~ }{\color[rgb]{0.0, 1.0, 1.0}c}{\color[rgb]{0.0, 0.0, 1.0}o}{\color[rgb]{0.33, 0.0, 0.5}l}{\color[rgb]{1.0, 0.0, 1.0}o}{\color[rgb]{1.0, 0.0, 0.5}r}}$: custom or provided by the active Obsidian theme.

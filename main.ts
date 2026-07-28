@@ -20,6 +20,8 @@ import { keymap, EditorView } from '@codemirror/view'
 import { settingsFacet } from "./src/SettingsFacet";
 import { applyColor, removeColor } from "src/color/TextColorFunctions";
 import { ColorSuggestModal } from 'src/utils/ColorSuggestModal';
+import { CustomColorModal } from 'src/utils/CustomColorModal';
+import { isLiteralColor } from 'src/color/InlineColor';
 
 const MAX_MENU_ITEMS: number = 10;
 
@@ -77,6 +79,14 @@ export default class FastTextColorPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: 'apply-custom-color',
+			name: 'Apply custom color (hex)',
+			editorCallback: (editor: Editor) => {
+				new CustomColorModal(this.app, editor, this.lastCustomColor()).open();
+			}
+		});
+
+		this.addCommand({
 			id: 'text-color-latestcolor',
 			name: 'Apply latest color',
 			editorCallback: (editor: Editor) => {
@@ -126,6 +136,14 @@ export default class FastTextColorPlugin extends Plugin {
 					});
 					submenu.addItem((subitem) => {
 						subitem
+							.setTitle("Custom...")
+							.setIcon("pipette")
+							.onClick(evt => {
+								new CustomColorModal(this.app, editor, this.lastCustomColor()).open();
+							});
+					})
+					submenu.addItem((subitem) => {
+						subitem
 							.setTitle("remove")
 							.setIcon("ban")
 							.onClick(evt => {
@@ -150,6 +168,21 @@ export default class FastTextColorPlugin extends Plugin {
 		this.styleElements.set(activeWindow, null);
 
 		this.setCssVariables();
+	}
+
+	/**
+	 * The color to seed the custom color picker with: the last applied color if
+	 * it was already a literal hex, otherwise its resolved value.
+	 */
+	lastCustomColor(): string {
+		const latest = LatestColor.getInstance().getColor();
+		if (latest && isLiteralColor(latest.id)) {
+			return latest.id;
+		}
+		if (latest && isLiteralColor(latest.color)) {
+			return latest.color;
+		}
+		return "#ff0000";
 	}
 
 	onunload() {

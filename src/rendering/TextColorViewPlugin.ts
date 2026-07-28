@@ -14,6 +14,7 @@ import { SyntaxNodeRef } from "@lezer/common"
 import { ColorWidget } from "src/widgets/ColorWidget";
 import { CSS_COLOR_PREFIX, getCurrentTheme } from "../FastTextColorSettings";
 import { settingsFacet } from "src/SettingsFacet";
+import { isLiteralColor, literalTextColor } from "src/color/InlineColor";
 import { editorInfoField, editorLivePreviewField, livePreviewState, MarkdownView } from "obsidian";
 
 class TextColorViewPlugin implements PluginValue {
@@ -180,9 +181,13 @@ function handleExpression(ExpressionNode: SyntaxNodeRef, builder: RangeSetBuilde
 						return false;
 					}
 				// eslint-disable-next-line no-fallthrough
-				case "Word":
-					builder.add(node.from + from, node.to + from, Decoration.mark({ class: `${CSS_COLOR_PREFIX}${themeName}-${colorStack[colorStack.length - 1].color}` }))
+				case "Word": {
+					const active = colorStack[colorStack.length - 1].color;
+					builder.add(node.from + from, node.to + from, isLiteralColor(active)
+						? Decoration.mark({ attributes: { style: literalTextColor(active).getCssInlineStyle(settings) } })
+						: Decoration.mark({ class: `${CSS_COLOR_PREFIX}${themeName}-${active}` }))
 					return false;
+				}
 
 				case "Expression":
 					colorStack.push({ color: '', inside: stateFrom <= from + node.to && stateTo >= from + node.from })

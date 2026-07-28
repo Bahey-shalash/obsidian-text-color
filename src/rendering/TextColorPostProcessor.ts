@@ -2,6 +2,7 @@ import { MarkdownPostProcessorContext } from 'obsidian'
 import { Tree } from "@lezer/common";
 import { CSS_COLOR_PREFIX, FastTextColorPluginSettings, getCurrentTheme } from 'src/FastTextColorSettings';
 import { PREFIX, SUFFIX, RegExMatch } from 'src/utils/regularExpressions';
+import { isLiteralColor, literalTextColor } from 'src/color/InlineColor';
 import { match } from 'assert';
 import { Console } from 'console';
 
@@ -18,7 +19,7 @@ export const textColorPostProcessor = (el: HTMLElement, context: MarkdownPostPro
 	const emergencyCopy = el.cloneNode(true);
 
 	try {
-		rebuildNode(el, themeName);
+		rebuildNode(el, themeName, settings);
 	} catch (e) {
 		console.error(`fatal in rebuildNode: ${e}`)
 		// readd from emergency Copy. should be removed as soon as node rebuilding is stable.
@@ -44,7 +45,7 @@ export const textColorPostProcessor = (el: HTMLElement, context: MarkdownPostPro
  * @param {Node[]} [nodeStack] - a stack to keep track of added color nodes.
  * @returns {Node} the rebuilt node.
  */
-function rebuildNode(node: Node, themeName: string, level: number = 0, nodeStack: Node[] = []): Node {
+function rebuildNode(node: Node, themeName: string, settings: FastTextColorPluginSettings, level: number = 0, nodeStack: Node[] = []): Node {
 	if (node.nodeName == 'CODE') {
 		return node;
 	}
@@ -82,7 +83,7 @@ function rebuildNode(node: Node, themeName: string, level: number = 0, nodeStack
 		// console.log(`node: ${childNode.nodeName}, level: ${level}`);
 		if (childNode.nodeType != Node.TEXT_NODE) {
 			// if childnode is not textnode, handle recursively.
-			childNode = rebuildNode(childNode, themeName, level + 1, nodeStack);
+			childNode = rebuildNode(childNode, themeName, settings, level + 1, nodeStack);
 
 			// nodeStack.last()?.appendChild(rebuildNode(childNode, themeName, level + 1));
 			continue;
@@ -126,7 +127,11 @@ function rebuildNode(node: Node, themeName: string, level: number = 0, nodeStack
 
 			// create the color element
 			let colorSpan = document.createElement("span");
-			colorSpan.addClass(`${CSS_COLOR_PREFIX}${themeName}-${color}`);
+			if (isLiteralColor(color)) {
+				colorSpan.setAttribute("style", literalTextColor(color).getCssInlineStyle(settings));
+			} else {
+				colorSpan.addClass(`${CSS_COLOR_PREFIX}${themeName}-${color}`);
+			}
 
 			// set text in last node and create color node and insert it after the last node. 
 			childNode.nodeValue = textBeforeDelim;

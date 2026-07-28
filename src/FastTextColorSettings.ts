@@ -11,8 +11,8 @@ import { validateColorName } from './utils/validateColorName';
 //                            CONSTANTS
 // --------------------------------------------------------------------------
 
-export const CSS_COLOR_PREFIX = "ftc-color-"
-export const VAR_COLOR_PREFIX = "--ftc-color-"
+// re-exported so existing imports from this module keep working.
+export { CSS_COLOR_PREFIX, VAR_COLOR_PREFIX } from "./constants";
 
 export const SETTINGS_VERSION = "3"
 

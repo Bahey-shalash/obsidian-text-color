@@ -3,6 +3,7 @@ import { LatestColor } from "../color/TextColor";
 import { CSS_COLOR_PREFIX, getColors, VAR_COLOR_PREFIX } from "../FastTextColorSettings"
 import { Menu } from "obsidian";
 import { settingsFacet } from "src/SettingsFacet";
+import { isLiteralColor } from "src/color/InlineColor";
 
 export class ColorWidget extends WidgetType {
 	id: string;
@@ -24,7 +25,11 @@ export class ColorWidget extends WidgetType {
 
 	toDOM(view: EditorView): HTMLElement {
 		const div = document.createElement("span");
-		div.addClass(`${CSS_COLOR_PREFIX}${this.themeName}-${this.id}`)
+		if (isLiteralColor(this.id)) {
+			div.setAttribute("style", `color: ${this.id};`);
+		} else {
+			div.addClass(`${CSS_COLOR_PREFIX}${this.themeName}-${this.id}`)
+		}
 		div.addClass("ftc-color-delimiter")
 
 		div.innerText = "⬤";
