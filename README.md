@@ -43,7 +43,7 @@ Instead of an id you can also write a hex color directly, for one-off colors you
 
 Literal colors are applied as an inline style rather than through a CSS class, so they need no theme entry and work in any note regardless of the active theme. They carry the color only: bold, italics, caps and lines are per-id options and still have to come from a theme color.
 
-Ids always win, so a theme color keeps working even if it is named like a hex string.
+Hex literals take precedence: an id that itself looks like a hex color (for example an id named `#ff0000`) is treated as the literal, not the theme entry. Ids like that never rendered correctly anyway, since `#` is not valid in a CSS class name.
 
 The `Apply custom color (hex)` command, and the `Custom...` entry in the right click *Color* submenu, open a color picker that inserts the literal color for you.
 
