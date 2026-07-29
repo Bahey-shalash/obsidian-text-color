@@ -13,28 +13,30 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = (process.argv[2] === "production");
 
-// use scss
-
-// Function to compile SCSS to CSS using node-sass
+/**
+ * Compile styles/styles.scss to styles.css.
+ *
+ * Synchronous on purpose: the production build calls process.exit as soon as
+ * the bundle is written, and an async compile could still be pending then,
+ * which would ship a stale styles.css with no failure signal.
+ */
 function compileSCSS() {
-	sass.render({
-		file: 'styles/styles.scss', // Input SCSS file
-		outFile: 'styles.css', // Output CSS file
-		// loadPaths: ["./styles"]
-	}, (error, result) => {
-		if (!error) {
-			fs.writeFileSync('styles.css', result.css.toString());
-		} else {
-			console.error(error);
+	try {
+		const result = sass.compile('styles/styles.scss');
+		fs.writeFileSync('styles.css', result.css);
+	} catch (error) {
+		console.error(error);
+		if (prod) {
+			process.exit(1);
 		}
-	});
+	}
 }
 
 const context = await esbuild.context({
 	banner: {
 		js: banner,
 	},
-	entryPoints: ["main.ts"],
+	entryPoints: ["src/main.ts"],
 	bundle: true,
 	external: [
 		"obsidian",
@@ -59,7 +61,6 @@ const context = await esbuild.context({
 	outfile: "main.js",
 });
 
-// Add SCSS compilation to the build process
 compileSCSS();
 
 if (prod) {
@@ -67,12 +68,11 @@ if (prod) {
 	process.exit(0);
 } else {
 	await context.watch();
-	// Watch the SCSS file for changes separately
+	// Watch the SCSS files for changes separately
 	fs.watch('styles', { recursive: true }, (eventType, filename) => {
 		if (eventType === 'change' && filename.endsWith('.scss')) {
-			compileSCSS(); // Re-compile SCSS on change
+			compileSCSS();
 			console.log("Rebuilding styles.css")
-			// build(); // Trigger the build process
 		}
 	});
 }

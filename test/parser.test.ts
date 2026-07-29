@@ -1,37 +1,47 @@
 import fs from 'fs';
 import path from 'path';
-import { parser } from "../src/rendering/language/textColorLanguageParser"
+import { parser } from "src/parser/textColorLanguageParser";
 
-// This test script was generated with Chat-GPT
+/** The node names of a parse, in document order. */
+function nodeNames(input: string): string[] {
+	const names: string[] = [];
+	parser.parse(input).iterate({ enter(node) { names.push(node.name); } });
+	return names;
+}
 
-console.log('Starting Parser Tests...');
-const testCasesDir = path.join(__dirname, 'test-cases');
-
-describe('Parser Tests', () => {
+describe("the grammar parses the sample documents", () => {
 	const testCasesDir = path.join(__dirname, 'test-cases');
 
-	// Test case for each file in the test-cases directory
 	fs.readdirSync(testCasesDir).forEach(file => {
-		it(`should parse ${file} correctly`, () => {
-			const filePath = path.join(testCasesDir, file);
-			const data = fs.readFileSync(filePath, 'utf8');
+		it(`parses ${file} without error nodes`, () => {
+			const data = fs.readFileSync(path.join(testCasesDir, file), 'utf8');
+			const names = nodeNames(data);
 
-			// Parse file contents using parser.parse()
-			try {
-				const parsedData = parser.parse(data);
-				let tree = '';
-
-				parsedData.iterate({
-					enter(node) {
-						tree += node.name + '\n';
-					},
-				})
-				console.log(tree);
-				// console.log(`Parsed data from ${file}:`, parsedData);
-			} catch (parseError) {
-				// Handle parsing errors
-				throw new Error(`Error parsing file ${file}: ${parseError.message}`);
-			}
+			expect(names[0]).toBe("TextColor");
+			expect(names).not.toContain("⚠");
 		});
+	});
+});
+
+describe("the grammar recognises the syntax", () => {
+	it("sees a complete expression", () => {
+		expect(nodeNames("~={red}text=~")).toEqual(expect.arrayContaining([
+			"Expression", "TcLeft", "LMarker", "Description", "Color", "InnerMarker",
+			"TcRight", "Text", "Word", "REnd", "RMarker",
+		]));
+	});
+
+	it("sees a token still being typed as unfinished", () => {
+		const names = nodeNames("~={red");
+		expect(names).toContain("Unfinished");
+		expect(names).not.toContain("Expression");
+	});
+
+	it("does not treat a token containing whitespace as a color", () => {
+		expect(nodeNames("~={a b}text=~")).not.toContain("Expression");
+	});
+
+	it("sees nesting", () => {
+		expect(nodeNames("~={red}a ~={blue}b=~ c=~").filter(n => n === "Expression")).toHaveLength(2);
 	});
 });

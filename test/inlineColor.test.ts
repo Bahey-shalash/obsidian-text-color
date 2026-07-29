@@ -1,5 +1,5 @@
-import { isLiteralColor, literalTextColor, toPickerHex } from "../src/color/InlineColor";
-import { parser } from "../src/rendering/language/textColorLanguageParser";
+import { isLiteralColor, normalizeHex, parseHex, toPickerHex } from "src/color/InlineColor";
+import { parser } from "src/parser/textColorLanguageParser";
 
 describe("isLiteralColor", () => {
 	test("accepts 3, 4, 6 and 8 digit hex", () => {
@@ -8,7 +8,7 @@ describe("isLiteralColor", () => {
 		});
 	});
 
-	test("rejects ids and malformed hex", () => {
+	test("rejects names and malformed hex", () => {
 		// note: #ff88 is valid, it is the 4 digit #rgba short form
 		["red", "ff8800", "#gg8800", "#ff880", "#ff88000", "#", ""].forEach(token => {
 			expect(isLiteralColor(token)).toBe(false);
@@ -16,24 +16,35 @@ describe("isLiteralColor", () => {
 	});
 });
 
-describe("literalTextColor", () => {
-	test("produces an inline style carrying the color", () => {
-		const style = literalTextColor("#ff8800").getCssInlineStyle();
-		expect(style).toContain("--ftc-color: #ff8800;");
-		expect(style).toContain("color: var(--ftc-color);");
+describe("parseHex", () => {
+	test("canonicalizes anything that is a hex", () => {
+		expect(parseHex("#FF8800")).toBe("#ff8800");
+		expect(parseHex(" 0F8 ")).toBe("#0f8");
 	});
 
-	test("does not add per-id formatting a literal color cannot carry", () => {
-		const style = literalTextColor("#ff8800").getCssInlineStyle();
-		expect(style).not.toContain("font-weight");
-		expect(style).not.toContain("font-style");
-		expect(style).not.toContain("text-decoration");
+	test("answers null for everything that is not", () => {
+		["red", "rgb(1,2,3)", "inherit", "#ff880", "", "  ",
+			"red; background-image: url(https://example.com/x)"].forEach(value => {
+			expect(parseHex(value)).toBe(null);
+		});
 	});
 
-	test("follows the colorCodeSection setting like a theme color", () => {
-		// @ts-expect-error only the one field is read
-		const style = literalTextColor("#ff8800").getCssInlineStyle({ colorCodeSection: true });
-		expect(style).toContain("--code-normal: var(--ftc-color);");
+	test("answers null for values that are not even strings", () => {
+		[null, undefined, 42, {}, ["#fff"]].forEach(value => {
+			expect(parseHex(value)).toBe(null);
+		});
+	});
+});
+
+describe("normalizeHex", () => {
+	test("adds the missing # and lowercases", () => {
+		expect(normalizeHex("FF8800")).toBe("#ff8800");
+		expect(normalizeHex(" #0F8 ")).toBe("#0f8");
+	});
+
+	test("falls back on garbage", () => {
+		expect(normalizeHex("not a color")).toBe("#ff0000");
+		expect(normalizeHex("zz8800", "#123456")).toBe("#123456");
 	});
 });
 
@@ -60,7 +71,7 @@ describe("grammar", () => {
 		return out;
 	}
 
-	test("tokenizes a literal color the same way as an id", () => {
+	test("tokenizes a literal color the same way as a name", () => {
 		expect(colorsOf("~={red}hello=~")).toEqual(["red"]);
 		expect(colorsOf("~={#ff8800}hello=~")).toEqual(["#ff8800"]);
 	});

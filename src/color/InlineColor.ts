@@ -1,28 +1,35 @@
-import { TextColor } from "./TextColor";
-
 /**
- * Matches a literal color written directly in the markup instead of a color id.
+ * Matches a literal color written directly in the markup instead of a name.
  * Supported: #rgb, #rgba, #rrggbb, #rrggbbaa (case insensitive).
  */
 export const HEX_COLOR = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 
-/**
- * Is this color token a literal color rather than an id defined in a theme?
- *
- * @param {string} token - the text between ~={ and }
- */
+/** Is this markup token a literal color rather than a name? */
 export function isLiteralColor(token: string): boolean {
 	return HEX_COLOR.test(token);
 }
 
 /**
- * Wrap a literal color in a throwaway TextColor so it reuses the exact same
- * css declaration logic as theme colors (colorCodeSection, --ftc-color, ...).
+ * The one gate every hex passes through. Accepts a hex with or without the
+ * leading `#`, in any case, and answers with the canonical lowercase form —
+ * or null for anything that is not a hex color at all.
  *
- * @param {string} hex - the literal color, e.g. #ff0000
+ * Everything that ends up in a style attribute comes through here, which is
+ * what keeps "a color" and "an arbitrary css string" from being the same
+ * type in this codebase.
  */
-export function literalTextColor(hex: string): TextColor {
-	return new TextColor(hex, hex, "literal");
+export function parseHex(value: unknown): string | null {
+	if (typeof value != "string") {
+		return null;
+	}
+	const trimmed = value.trim();
+	const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+	return HEX_COLOR.test(withHash) ? withHash.toLowerCase() : null;
+}
+
+/** Coerce user input into a valid hex, or the fallback if it cannot be one. */
+export function normalizeHex(value: string, fallback = "#ff0000"): string {
+	return parseHex(value) ?? fallback;
 }
 
 /**

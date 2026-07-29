@@ -1,9 +1,15 @@
 /* color delimiter icon */
 
 .ftc-color-delimiter {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: var(--radius-s);
+  background-color: var(--ftc-color);
+  border: 1px solid var(--background-modifier-border);
+  vertical-align: middle;
+  margin-right: 3px;
   cursor: pointer;
-  padding-left: 2px;
-  padding-right: 2px;
 }
 
 

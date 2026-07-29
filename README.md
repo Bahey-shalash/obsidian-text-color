@@ -1,116 +1,54 @@
-# Fast Text Color
+# Text Color
 
-This Obsidian plugin allows you to create beautifully colored interactive notes using a custom coloring syntax. 
+Color text in Obsidian with a hex-based markup syntax. The note stores a plain hex, so what renders is what is written: live preview, reading mode and PDF export all draw the same inline color.
 
-<img src="https://github.com/Superschnizel/obisdian-fast-text-color/assets/47162464/422a5839-d352-4f44-99d1-e76311a54900" width="75%">
+```
+~={#fb464c} colored text $x_{n}^2$ =~
+~={#027aff}you can even ~={#e0de71}color=~ text inside colored text =~
+```
 
+![The markup above rendered: red text with colored LaTeX, and a yellow word nested inside a blue sentence](images/demo.png)
 
 ## Features
-- Wide variety of available formatting options
-- Full live preview support
-- Multiple ways of applying/removing color to suit your individual needs
-	- Multiple intuitive editor integrations
-	- Custom coloring syntax that neatly integrates into Obsidian Markdown
-	- Keyboard-only usage possible
-- Bundle formatting presets into themes
-	- Override active theme for individual notes through Frontmatter property
-- No exposed HTML in the editing view
-- Further in-depth customization using CSS classes
 
-<img src="https://github.com/Superschnizel/obisdian-fast-text-color/assets/47162464/c7974c32-1b92-4a9d-a539-13a2ec38ed1d" width="80%">
+- Hex-in-the-note markup: `~={#rrggbb}colored text=~` — no configuration attached, notes render the same on any machine
+- Identical rendering in live preview, reading mode and PDF export (pure inline styles, by construction)
+- Name-to-hex palette: menus and the command suggester show names, notes always receive the hex
+- Typing a palette name by hand (`~={yellow}`) is rewritten to its hex the moment the token completes
+- Interactive delimiter: a small color swatch in front of the visible hex (VS Code style), with a hover menu to change or remove the color
+- Rendered LaTeX inside colored text is colored too
+- Lean by design: no themes, no per-id formatting, no generated CSS
 
 ## Usage
 
-Color text sections using the following syntax:
-
-<img src="https://github.com/Superschnizel/obisdian-fast-text-color/assets/47162464/fdc4c624-7fc5-4b6a-9fa4-8e1de7fb97f4" width="60%">
+### Syntax
 
 ```
-~={id} This text is colored according to the id=~
-```
-
-The id maps to one of the color formats provided by the current active theme, which can be selected in the settings.
-
-#### Literal colors
-
-Instead of an id you can also write a hex color directly, for one-off colors you do not want to define in a theme:
-
-```
-~={#ff8800} This text uses a literal color =~
+~={#ff8800} This text uses that color =~
 ~={#0f8}    Short form works too =~
 ~={#ff880080} So does an alpha channel =~
 ```
 
-Literal colors are applied as an inline style rather than through a CSS class, so they need no theme entry and work in any note regardless of the active theme. They carry the color only: bold, italics, caps and lines are per-id options and still have to come from a theme color.
+Colors nest, and rendered LaTeX inside a colored section is colored too.
 
-Hex literals take precedence: an id that itself looks like a hex color (for example an id named `#ff0000`) is treated as the literal, not the theme entry. Ids like that never rendered correctly anyway, since `#` is not valid in a CSS class name.
+### Applying color
 
-The `Apply custom color (hex)` command, and the `Custom...` entry in the right click *Color* submenu, open a color picker that inserts the literal color for you.
+- Select text, right click → **Color** submenu: palette names, `Custom...` picker, remove
+- Commands: `Change text color` (palette suggester), `Apply custom color (hex)`, `Apply latest color`, `Remove text color`
+- Press Tab at the end of a colored section to jump out of it
 
-The formatting options include:
+### Settings
 
-- $\textsf{{\color[rgb]{1.0, 0.0, 0.0}T}{\color[rgb]{1.0, 0.5, 0.0}e}{\color[rgb]{1.0, 1.0, 0.0}x}{\color[rgb]{0.0, 1.0, 0.0}t~ }{\color[rgb]{0.0, 1.0, 1.0}c}{\color[rgb]{0.0, 0.0, 1.0}o}{\color[rgb]{0.33, 0.0, 0.5}l}{\color[rgb]{1.0, 0.0, 1.0}o}{\color[rgb]{1.0, 0.0, 0.5}r}}$: custom or provided by the active Obsidian theme.
-- **Bold**
-- *Italics*
-- <ins>Under</ins>-, o̅v̅e̅r̅-, and ~~through~~lines
-- FULL CAPS, Sᴍᴀʟʟ Cᴀᴘs
+The palette is a simple list of name → hex rows: recolor, rename, reorder, delete. Names are menu labels only; they never enter your notes.
 
-These options are handled using CSS classes, which means that any changes will be applied to preexisting sections marked with the respective id retroactively.
+## Installation
 
-### Themes
+Not yet in the community plugin directory. Until then, install via [BRAT](https://github.com/TfTHacker/obsidian42-brat) with this repository's URL, or copy `main.js`, `manifest.json` and `styles.css` from the latest release into `.obsidian/plugins/text-color/`.
 
-Colors are bundled into themes, which can be created and edited in the plugin settings. You can also pick the global active theme there.
+## About this fork
 
-If you want to override your global active theme for a specific note, you can do so by setting the frontmatter property `ftcTheme` to the name of the theme you wish to use.
+A lean fork of [Fast Text Color](https://github.com/Superschnizel/obsidian-fast-text-color) by Leon Holtmeier. The markup syntax and the lezer grammar carry over; rendering was rebuilt hex-only, and themes, per-id formatting, keybinds and the floating color menu were removed by design. There is no separate migration layer: notes written with the original `~={id}` markup render whenever a palette entry carries that name, and editing such a token rewrites it to its hex. Licensed GPL-3.0, like the original.
 
-### Applying Color
+## How it works
 
-#### Editor Context Menu
-
-Right clicking on highlighted text lets you change the color via the context menu. All colors included in the current theme will be available.
-
-<img src="https://github.com/Superschnizel/obisdian-fast-text-color/assets/47162464/4ad2c7c1-6f9b-4221-b3eb-ad26853cc0c1" width="30%">
-
-#### Interactive Delimiter
-
-If the interactive delimiter option is enabled in the settings (default), you can change or remove the color of text using the interactive delimiter shown in place of the color name.
-
-<img src="https://github.com/Superschnizel/obisdian-fast-text-color/assets/47162464/06587d0b-9e3d-4b24-9427-9ab5f655060b" width="30%">
-
-### Command
-
-Calling the `change text color` command lets you choose one of the colors that are available from the currently selected theme using a suggester modal.
-
-#### Coloring Menu
-
-If the option *Use keybindings and colormenu* is set, calling the `change text color` command instead opens the coloring menu.
-
-You can select a color by clicking the corresponding button or using the keybind assigned in the theme editor.
-
-<p float="left">
-	<img src="https://github.com/Superschnizel/obisdian-fast-text-color/assets/47162464/6ff82ee6-e096-4095-9cd3-03839d15fe18" width="49%">
-	<img src="https://github.com/Superschnizel/obisdian-fast-text-color/assets/47162464/e6c02305-fc4c-4325-be4b-41dc2f1155dc" width="49%">
-</p>
-
-## Known Issues
-
-These issues mainly arise from the different techniques required for live preview and reading mode and will be fixed in the future.
-
-- **Reading Mode**.
-	- An unopened closing delimiter `=~` will lead to problems in reading mode.
-
-## Planned Features
-
-- [x] Selectable color themes
-- [x] More/better ways to apply color
-	- [x] Submenu in editor context menu
-    - [ ] Suggester modal
- - [x] Changing color through interactive delimiter
- - [ ] Individual commands for theme colors
- - [ ] Automatically color by keyword
- - [ ] More (custom) CSS options
- - [ ] Full note commands (color by keyword etc.)
-
-## How It Works
-
-This plugin uses a custom parser, which allows the coloring to interact with the established Obsidian Markdown syntax. A CSS class containing the specified style options is created for each color id.
+A custom lezer parser integrates the coloring syntax with Obsidian's editor; reading mode walks the rendered blocks. All coloring is applied as inline styles derived from the hex in the markup.
