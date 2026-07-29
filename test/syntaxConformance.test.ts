@@ -8,10 +8,12 @@
  * empty token, markup inside a code fence. This feeds one corpus through both
  * and asserts they render the same characters in the same colors.
  *
- * Scope: single block, no backticks. Reading mode receives markdown that has
- * already been rendered to dom, so code spans and block splitting are not
- * expressible here; those rules are tested against their own renderers in
- * treeQueries.test.ts, autoHexify.test.ts and postProcessor.test.ts.
+ * Scope: single block, no closed code spans. Reading mode receives markdown
+ * that has already been rendered to dom, so `<code>` and block splitting are
+ * not expressible here; those rules are tested against their own renderers in
+ * treeQueries.test.ts, autoHexify.test.ts and postProcessor.test.ts. An
+ * unbalanced backtick is expressible: obsidian renders it as the plain text it
+ * is, which is exactly the dom this feeds the post processor.
  */
 import { EditorState } from "@codemirror/state";
 import { textColorParserField } from "src/editor/TextColorStateField";
@@ -54,6 +56,12 @@ const CORPUS = [
 	"~={}empty ~={red}with real markup inside=~ tail=~",
 	"~={a b}a token with whitespace=~",
 	"~={red}one=~ plain ~={blue}two=~",
+	// the grammar swallows everything behind a lone backtick into a
+	// `CodeSection`, closing marker included; obsidian renders that backtick as
+	// plain text, so the coloring has to look straight through the node.
+	"~={red}a `b=~ tail",
+	"~={red}a `b ~={blue}c=~ d=~",
+	"a lone ` backtick outside any markup",
 	"~={red}=~",
 	"~={red",
 	"trailing ~={red}",

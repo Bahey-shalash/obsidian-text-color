@@ -17,12 +17,29 @@ import { decorateExpression } from "src/editor/ExpressionDecorations";
 import { buildTextColorDecorations } from "src/editor/buildDecorations";
 import { DEFAULT_SETTINGS } from "src/settings/settings";
 
-function stateOf(doc: string): EditorState {
+function stateOf(doc: string, colorCodeSection = false): EditorState {
 	return EditorState.create({
 		doc,
 		selection: { anchor: 0 },
-		extensions: [textColorParserField, settingsFacet.of(DEFAULT_SETTINGS)],
+		extensions: [
+			textColorParserField,
+			settingsFacet.of({ ...DEFAULT_SETTINGS, colorCodeSection }),
+		],
 	});
+}
+
+const RED = DEFAULT_SETTINGS.palette[0].hex;
+
+/** What the decorations say about a document: hidden markers and colored runs. */
+function renderedOf(doc: string, colorCodeSection = false): string[] {
+	const rendered: string[] = [];
+	buildTextColorDecorations(stateOf(doc, colorCodeSection), [{ from: 0, to: doc.length }])
+		.between(0, doc.length, (from, to, value) => {
+			const style = (value.spec as { attributes?: { style?: string } }).attributes?.style;
+			const hex = style == undefined ? "hidden" : /--ftc-color:\s*(#[0-9a-f]+)/.exec(style)?.[1];
+			rendered.push(`${JSON.stringify(doc.slice(from, to))} ${hex}`);
+		});
+	return rendered;
 }
 
 /** The top level expression nodes of a document, in order. */
@@ -74,6 +91,62 @@ describe("decorateExpression stays inside its expression", () => {
 		expect(errors).toEqual([]);
 		expect(styles).toContain("#ff0000");
 		expect(styles).toContain("#00ff00");
+	});
+});
+
+/**
+ * Only a code section that closes its backtick is literal code. An unbalanced
+ * one is plain text in obsidian, and the grammar puts the whole rest of the
+ * line inside it — the enclosing color's closing marker included. Skipping it
+ * left that `=~` on screen and the color running on past its own end, which
+ * `syntaxConformance.test.ts` catches as the two renderers disagreeing; the
+ * `colorCodeSection` half of the rule is not expressible there, so it is here.
+ */
+describe("code sections", () => {
+	test("an unbalanced backtick does not swallow the closing marker", () => {
+		expect(renderedOf("lead ~={red}a `b=~ trail")).toEqual([
+			'"~={red}" hidden',
+			`"a " ${RED}`,
+			`"\`b" ${RED}`,
+			'"=~" hidden',
+		]);
+	});
+
+	test("the setting has no say over text an unbalanced backtick only looks like code", () => {
+		expect(renderedOf("lead ~={red}a `b=~ trail", true))
+			.toEqual(renderedOf("lead ~={red}a `b=~ trail", false));
+	});
+
+	test("markup inside an unbalanced backtick still nests", () => {
+		expect(renderedOf("lead ~={red}a `b ~={blue}c=~ d=~ trail")).toEqual([
+			'"~={red}" hidden',
+			`"a " ${RED}`,
+			`"\`b " ${RED}`,
+			'"~={blue}" hidden',
+			`"c" ${DEFAULT_SETTINGS.palette[5].hex}`,
+			'"=~" hidden',
+			`" d" ${RED}`,
+			'"=~" hidden',
+		]);
+	});
+
+	test("a closed code span is left alone unless the setting says otherwise", () => {
+		expect(renderedOf("lead ~={red}a `b` c=~ trail")).toEqual([
+			'"~={red}" hidden',
+			`"a " ${RED}`,
+			`" c" ${RED}`,
+			'"=~" hidden',
+		]);
+	});
+
+	test("a closed code span is colored as one piece when the setting is on", () => {
+		expect(renderedOf("lead ~={red}a `b` c=~ trail", true)).toEqual([
+			'"~={red}" hidden',
+			`"a " ${RED}`,
+			`"\`b\`" ${RED}`,
+			`" c" ${RED}`,
+			'"=~" hidden',
+		]);
 	});
 });
 

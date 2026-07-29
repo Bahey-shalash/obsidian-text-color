@@ -6,6 +6,7 @@ import { ColorWidget } from "src/editor/ColorWidget";
 import { settingsFacet } from "src/editor/SettingsFacet";
 import { colorStyle } from "src/color/ColorStyle";
 import { resolveTokenHex } from "src/color/resolveToken";
+import { shouldDescendInto } from "src/syntax";
 
 /** One open ~={token} while walking an expression, innermost last. */
 interface ColorFrame {
@@ -35,10 +36,11 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 
 	const selection = state.selection.main;
 	const settings = state.facet(settingsFacet);
+	const sliceDoc = (from: number, to: number) => state.sliceDoc(from, to);
 
 	const innermost = () => frames[frames.length - 1];
 
-	const markText = (node: SyntaxNodeRef) => {
+	const markText = (range: { from: number, to: number }) => {
 		const frame = innermost();
 		if (frame == undefined) {
 			return; // text outside any open color; nothing to apply.
@@ -47,7 +49,10 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 		if (hex == null) {
 			return; // unknown name or empty token: leave the text alone.
 		}
-		builder.add(node.from, node.to,
+		if (range.to <= range.from) {
+			return; // codemirror does not accept an empty mark.
+		}
+		builder.add(range.from, range.to,
 			Decoration.mark({ attributes: { style: colorStyle(hex, settings) } }));
 	};
 
@@ -59,7 +64,36 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 	const hasColorToken = (node: SyntaxNodeRef): boolean =>
 		node.node.getChild("TcLeft")?.getChild("Description")?.getChild("Color") != null;
 
+	/**
+	 * The text of an unbalanced code section that still has to be marked. The
+	 * grammar hands that text out as bare `char` tokens with no `Word` nodes of
+	 * its own, so nothing in the switch below would ever colour it; the runs
+	 * between the markers inside the section are marked from here instead.
+	 */
+	let codeRun: { pos: number, end: number } | null = null;
+
+	/**
+	 * Mark the run in front of the node about to be entered, and step over that
+	 * node. Marking as the walk arrives rather than all at once up front is
+	 * what keeps the runs in the order the builder demands, and what makes each
+	 * of them see the color that is open where it sits: the run before a
+	 * closing marker still belongs to the color that marker ends.
+	 */
+	const markCodeRunBefore = (node: { from: number, to: number }) => {
+		if (codeRun == null || node.from < codeRun.pos) {
+			return; // inside something the run has already stepped over.
+		}
+		markText({ from: codeRun.pos, to: Math.min(node.from, codeRun.end) });
+		codeRun = node.to < codeRun.end ? { pos: node.to, end: codeRun.end } : null;
+	};
+
 	walkSubtree(expression, (node: SyntaxNodeRef) => {
+		// the backtick is as plain as the rest of an unbalanced section, so it
+		// stays inside the run; only the markers below end one.
+		if (node.type.name != "CODE") {
+			markCodeRunBefore(node);
+		}
+
 		switch (node.type.name) {
 			// `Unfinished` is also how the grammar files `~={token}=~`,
 			// a complete but empty colored section: TcLeft immediately
@@ -117,11 +151,21 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 				return true;
 
 			case "CodeSection":
-				if (!settings.colorCodeSection) {
+				// the rule every other consumer of the syntax already uses:
+				// only a section that closes its backtick is literal code, and
+				// only that is left alone. An unbalanced one is plain text in
+				// obsidian (#41), and the grammar swallows the rest of the line
+				// into it — the enclosing color's closing marker included — so
+				// skipping it left that marker on screen and the color running
+				// on past its own end.
+				if (!shouldDescendInto(node, sliceDoc)) {
+					if (settings.colorCodeSection) {
+						markText(node);
+					}
 					return false;
 				}
-				markText(node);
-				return false;
+				codeRun = { pos: node.from, end: node.to };
+				return true;
 
 			case "Word":
 				markText(node);
@@ -131,6 +175,10 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 				return true;
 		}
 	});
+
+	// a code section that reaches the end of the expression has no node behind
+	// it for the walk to arrive at, so the end of the expression stands in.
+	markCodeRunBefore({ from: expression.to, to: expression.to });
 }
 
 /**

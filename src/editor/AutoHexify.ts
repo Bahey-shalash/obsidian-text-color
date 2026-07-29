@@ -1,4 +1,4 @@
-import { EditorState, Transaction } from "@codemirror/state";
+import { EditorState } from "@codemirror/state";
 import { EditorView, ViewUpdate } from "@codemirror/view";
 import { textColorParserField } from "src/editor/TextColorStateField";
 import { settingsFacet } from "src/editor/SettingsFacet";
@@ -124,12 +124,13 @@ export const autoHexify = EditorView.updateListener.of((update: ViewUpdate) => {
 			if (update.view.state.doc != expectedDoc) {
 				return;
 			}
-			update.view.dispatch({
-				changes: conversions,
-				// not an undo step of its own: undoing the keystroke that
-				// completed the token takes the conversion with it.
-				annotations: Transaction.addToHistory.of(false),
-			});
+			// an undo step of its own. Keeping it out of the history does not
+			// fold it into the keystroke that triggered it — codemirror only
+			// maps unrecorded changes forward — so undo would revert the
+			// keystroke and leave the hex behind, with the name the user typed
+			// unrecoverable. The `isHistoryUpdate` guard above is what stops
+			// undoing this step from immediately reapplying it.
+			update.view.dispatch({ changes: conversions });
 		} catch (e) {
 			console.error(`text-color: auto hexify failed: ${e}`);
 		}

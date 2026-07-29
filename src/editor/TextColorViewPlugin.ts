@@ -44,13 +44,15 @@ class TextColorViewPlugin implements PluginValue {
 	/** recolors math widgets as they are rendered asynchronously by mathjax. */
 	mathObserver: MutationObserver;
 
-	/** pending coalesced math pass, if any */
-	private mathPass: number | null = null;
-
-	private readonly view: EditorView;
+	/**
+	 * Pending coalesced math pass, if any, together with the window whose timer
+	 * it is: a pop out is already gone by the time the plugin is destroyed, so
+	 * asking for the window again there would answer with the main one and
+	 * cancel a timer belonging to somebody else.
+	 */
+	private mathPass: { window: Window, id: number } | null = null;
 
 	constructor(view: EditorView) {
-		this.view = view;
 		this.decorations = buildTextColorDecorations(view.state, view.visibleRanges);
 
 		this.mathObserver = new MutationObserver((records) => {
@@ -100,7 +102,7 @@ class TextColorViewPlugin implements PluginValue {
 	destroy() {
 		this.mathObserver.disconnect();
 		if (this.mathPass != null) {
-			windowOf(this.view).clearTimeout(this.mathPass);
+			this.mathPass.window.clearTimeout(this.mathPass.id);
 			this.mathPass = null;
 		}
 	}
@@ -114,10 +116,14 @@ class TextColorViewPlugin implements PluginValue {
 		if (this.mathPass != null) {
 			return;
 		}
-		this.mathPass = windowOf(view).setTimeout(() => {
-			this.mathPass = null;
-			colorMathWidgets(view);
-		}, 0);
+		const win = windowOf(view);
+		this.mathPass = {
+			window: win,
+			id: win.setTimeout(() => {
+				this.mathPass = null;
+				colorMathWidgets(view);
+			}, 0),
+		};
 	}
 }
 

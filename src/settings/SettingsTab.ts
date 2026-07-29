@@ -13,6 +13,12 @@ import { validateColorName } from "src/settings/validateColorName";
 /** How long the user has to stop typing before a rename is written, in ms. */
 const RENAME_DELAY = 400;
 
+/** A rename the user has typed but not yet paid the save for. */
+interface PendingName {
+	commit: Debouncer<[string], void>;
+	value: string;
+}
+
 /**
  * The palette: menu name <-> hex, one row per color. The name is only a label
  * for the menus; notes always receive the hex.
@@ -25,13 +31,22 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 	plugin: FastTextColorPlugin;
 
 	/**
-	 * The rename waiting to be written, while the user is still typing. Saving
+	 * The renames waiting to be written, while the user is still typing. Saving
 	 * a name costs a write to data.json, a reconfigure of every open editor and
 	 * a rerender of every open preview, which is far too much to pay per
-	 * keystroke; everything that reads the palette afterwards flushes it first,
-	 * so a pending rename is never lost.
+	 * keystroke; everything that reads the palette afterwards flushes them
+	 * first, so a pending rename is never lost.
+	 *
+	 * Every row that has one is held, not just the one typed in last: each row
+	 * commits against its own index, and an index only means what it meant
+	 * while the palette keeps its order. A rename left behind here would fire
+	 * after the next reorder or delete and land on a different color.
+	 *
+	 * Keyed by that index, and holding the name as well as the timer, because
+	 * both of the things the pending renames have to take part in need to read
+	 * them: the duplicate check and the next write of the palette.
 	 */
-	private pendingName: Debouncer<[string], void> | null = null;
+	private readonly pendingNames = new Map<number, PendingName>();
 
 	constructor(app: App, plugin: FastTextColorPlugin) {
 		super(app, plugin);
@@ -39,7 +54,8 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 	}
 
 	hide(): void {
-		this.flushPendingName();
+		this.flushPendingNames()
+			.catch(e => console.error(`text-color: could not save the palette: ${e}`));
 		super.hide();
 	}
 
@@ -69,9 +85,8 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 					.onClick(async () => {
 						// the palette at click time, not the snapshot this tab
 						// was rendered from: a rename keeps focus and does not
-						// redraw, so it lives only in the current object.
-						this.flushPendingName();
-						const palette = this.plugin.settings.palette;
+						// redraw, so it lives only in the pending set.
+						const palette = this.takePendingNames();
 						await this.updatePalette([...palette, { name: nextFreeName(palette), hex: "#ffffff" }]);
 						this.display();
 					});
@@ -105,17 +120,21 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 			.onChange(async value => {
 				// the entry at click time, not the snapshot this row was drawn
 				// from: a rename keeps focus and does not redraw, so spreading
-				// the snapshot here would write the old name back.
-				this.flushPendingName();
+				// the snapshot here would write the old name back. Bail out
+				// before taking the pending renames, so a row that is already
+				// gone does not swallow them.
 				const current = this.entryAt(index);
 				if (current == undefined) {
 					return;
 				}
-				await this.replaceColor(index, { ...current, hex: normalizeHex(value, current.hex) });
+				const palette = this.takePendingNames();
+				palette[index] = { ...palette[index], hex: normalizeHex(value, current.hex) };
+				await this.updatePalette(palette);
 				this.display();
 			});
 
-		const commitName = debounce((value: string) => {
+		const commitName: Debouncer<[string], void> = debounce((value: string) => {
+			this.pendingNames.delete(index);
 			const current = this.entryAt(index);
 			if (current == undefined) {
 				return;
@@ -128,13 +147,18 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 		name.setValue(color.name)
 			.setPlaceholder("name")
 			.onChange(value => {
-				const taken = this.plugin.settings.palette.some((c, i) => i !== index && c.name === value);
+				const taken = this.effectiveNames().some((n, i) => i !== index && n === value);
 				if (!validateColorName(value) || taken) {
 					name.inputEl.addClass("ftc-name-invalid");
+					// the keystroke before this one may have been valid and is
+					// still scheduled; committing that prefix would save a name
+					// the user typed past, not the one they meant.
+					commitName.cancel();
+					this.pendingNames.delete(index);
 					return;
 				}
 				name.inputEl.removeClass("ftc-name-invalid");
-				this.pendingName = commitName;
+				this.pendingNames.set(index, { commit: commitName, value });
 				commitName(value);
 			});
 		name.inputEl.addClass("ftc-palette-name");
@@ -155,7 +179,10 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 			.setIcon("trash")
 			.setTooltip("delete color")
 			.onClick(async () => {
-				this.flushPendingName();
+				// awaited, not folded into the delete below: the confirmation
+				// sits between the two, and a rename the user then decides not
+				// to delete has to survive saying no.
+				await this.flushPendingNames();
 				const name = this.entryAt(index)?.name ?? color.name;
 				if (await confirmByModal(this.app,
 					`"${name}" disappears from the menus. Hexes already in your notes keep rendering.`,
@@ -166,11 +193,44 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 			});
 	}
 
-	/** Write a rename the user has stopped typing but not yet paid for. */
-	private flushPendingName(): void {
-		const pending = this.pendingName;
-		this.pendingName = null;
-		pending?.run();
+	/**
+	 * The palette with every pending rename applied, and the pending set left
+	 * empty; the caller folds the result into the one write it was going to
+	 * make anyway.
+	 *
+	 * Letting the renames save themselves instead would put two snapshots of
+	 * data.json in flight at once — theirs and the caller's — and nothing
+	 * orders the two writes, so the older one can land last and take the
+	 * caller's change off disk while it is still on screen.
+	 */
+	private takePendingNames(): PaletteColor[] {
+		const palette = this.plugin.settings.palette.map((c, i) => {
+			const pending = this.pendingNames.get(i);
+			return pending == undefined ? c : { ...c, name: pending.value };
+		});
+		// a rename that is about to be written must not also fire on its own.
+		this.pendingNames.forEach(pending => pending.commit.cancel());
+		this.pendingNames.clear();
+		return palette;
+	}
+
+	/** Write every rename the user has stopped typing but not yet paid for. */
+	private flushPendingNames(): Promise<void> {
+		if (this.pendingNames.size == 0) {
+			return Promise.resolve();
+		}
+		return this.updatePalette(this.takePendingNames());
+	}
+
+	/**
+	 * The names as they will read once the pending renames land. The duplicate
+	 * check has to see those: two rows renamed to the same thing inside one
+	 * debounce window would both pass a check against the saved palette, and a
+	 * duplicate leaves the second color unreachable, because resolving a name
+	 * takes the first match — the markup would silently get the other hex.
+	 */
+	private effectiveNames(): string[] {
+		return this.plugin.settings.palette.map((c, i) => this.pendingNames.get(i)?.value ?? c.name);
 	}
 
 	/** The palette entry a row stands for, as it is right now. */
@@ -183,12 +243,13 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 	}
 
 	private async moveColor(index: number, direction: number): Promise<void> {
-		this.flushPendingName();
-		const palette = [...this.plugin.settings.palette];
+		// the bounds first, so a move that goes nowhere does not take the
+		// pending renames with it and drop them unwritten.
 		const target = index + direction;
-		if (target < 0 || target >= palette.length) {
+		if (target < 0 || target >= this.plugin.settings.palette.length) {
 			return;
 		}
+		const palette = this.takePendingNames();
 		[palette[index], palette[target]] = [palette[target], palette[index]];
 		await this.updatePalette(palette);
 		this.display();
