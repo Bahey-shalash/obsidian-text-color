@@ -37,12 +37,19 @@ export function shouldDescendInto(node: SyntaxNodeRef, sliceDoc: SliceDoc): bool
 
 /** Is this position inside a code section that renders as literal code? */
 export function isInsideLiteralCode(tree: Tree, sliceDoc: SliceDoc, pos: number): boolean {
-	let node: SyntaxNode | null = tree.resolveInner(pos, 0);
-	while (node != null) {
-		if (node.type.name == "CodeSection" && isLiteralCodeSection(node, sliceDoc)) {
+	return isLiteralCodeNode(tree.resolveInner(pos, 0), sliceDoc);
+}
+
+/**
+ * Is this node inside a code section that renders as literal code? The node
+ * form, for callers that already hold one — a position would have to be picked
+ * out of it, and the boundaries are exactly where that gets ambiguous.
+ */
+export function isLiteralCodeNode(node: SyntaxNode | null, sliceDoc: SliceDoc): boolean {
+	for (let n = node; n != null; n = n.parent) {
+		if (n.type.name == "CodeSection" && isLiteralCodeSection(n, sliceDoc)) {
 			return true;
 		}
-		node = node.parent;
 	}
 	return false;
 }

@@ -70,9 +70,51 @@ describe("insertColor with several cursors", () => {
 		expect(editor.text).toBe(`${OPEN}aaa=~ bbb${OPEN}=~`);
 	});
 
+	/**
+	 * `setSelections` replaces the whole selection, so every cursor has to be
+	 * in the list it is given: a selection left out of it is a selection the
+	 * user loses the moment a caret elsewhere puts the call in motion.
+	 */
+	test("a selection survives a caret being served alongside it", () => {
+		const editor = FakeEditor.withSelections("aaa bbb", [[0, 3], [7, 7]]);
+		insertColor(HEX, editor.asEditor());
+
+		const pair = OPEN.length + "=~".length;
+		expect(editor.selectionOffsets).toEqual([
+			[0, OPEN.length + 3 + "=~".length],   // the wrapped selection, kept
+			[7 + pair + OPEN.length, 7 + pair + OPEN.length],
+		]);
+	});
+
 	test("multi line selections at several cursors", () => {
 		const editor = FakeEditor.withSelections("one\ntwo\nthree", [[0, 3], [8, 13]]);
 		insertColor(HEX, editor.asEditor());
 		expect(editor.text).toBe(`${OPEN}one=~\ntwo\n${OPEN}three=~`);
+	});
+});
+
+/**
+ * Coloring is one action to the user. Applying it as one edit per cursor made
+ * it one undo per cursor, and left the document in a half coloured state in
+ * between; it goes in as a single transaction instead.
+ */
+describe("insertColor as one step", () => {
+	test("several cursors are coloured in a single transaction", () => {
+		const editor = FakeEditor.withSelections("aaa bbb ccc", [[0, 3], [4, 7], [8, 11]]);
+		insertColor(HEX, editor.asEditor());
+
+		expect(editor.text).toBe(`${OPEN}aaa=~ ${OPEN}bbb=~ ${OPEN}ccc=~`);
+		expect(editor.transactionCount).toBe(1);
+	});
+
+	test("carets land on the right line when cursors sit on different lines", () => {
+		const editor = FakeEditor.withCursorsAt("one\ntwo", [0, 4]);
+		insertColor(HEX, editor.asEditor());
+
+		expect(editor.text).toBe(`${OPEN}=~one\n${OPEN}=~two`);
+		expect(editor.listSelections().map(selection => selection.head)).toEqual([
+			{ line: 0, ch: OPEN.length },
+			{ line: 1, ch: OPEN.length },
+		]);
 	});
 });

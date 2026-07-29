@@ -1,5 +1,5 @@
 import type FastTextColorPlugin from "src/main";
-import { App, ColorComponent, ExtraButtonComponent, PluginSettingTab, Setting, TextComponent } from "obsidian";
+import { App, ColorComponent, Debouncer, ExtraButtonComponent, PluginSettingTab, Setting, TextComponent, debounce } from "obsidian";
 import { colorStyle } from "src/color/ColorStyle";
 import { normalizeHex } from "src/color/InlineColor";
 import { PaletteColor, nextFreeName } from "src/settings/settings";
@@ -9,6 +9,9 @@ import { validateColorName } from "src/settings/validateColorName";
 // --------------------------------------------------------------------------
 //                           Settings Tab
 // --------------------------------------------------------------------------
+
+/** How long the user has to stop typing before a rename is written, in ms. */
+const RENAME_DELAY = 400;
 
 /**
  * The palette: menu name <-> hex, one row per color. The name is only a label
@@ -21,9 +24,23 @@ import { validateColorName } from "src/settings/validateColorName";
 export class FastTextColorPluginSettingTab extends PluginSettingTab {
 	plugin: FastTextColorPlugin;
 
+	/**
+	 * The rename waiting to be written, while the user is still typing. Saving
+	 * a name costs a write to data.json, a reconfigure of every open editor and
+	 * a rerender of every open preview, which is far too much to pay per
+	 * keystroke; everything that reads the palette afterwards flushes it first,
+	 * so a pending rename is never lost.
+	 */
+	private pendingName: Debouncer<[string], void> | null = null;
+
 	constructor(app: App, plugin: FastTextColorPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+	}
+
+	hide(): void {
+		this.flushPendingName();
+		super.hide();
 	}
 
 	display(): void {
@@ -53,6 +70,7 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 						// the palette at click time, not the snapshot this tab
 						// was rendered from: a rename keeps focus and does not
 						// redraw, so it lives only in the current object.
+						this.flushPendingName();
 						const palette = this.plugin.settings.palette;
 						await this.updatePalette([...palette, { name: nextFreeName(palette), hex: "#ffffff" }]);
 						this.display();
@@ -85,9 +103,26 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 		new ColorComponent(row)
 			.setValue(color.hex)
 			.onChange(async value => {
-				await this.replaceColor(index, { ...color, hex: normalizeHex(value, color.hex) });
+				// the entry at click time, not the snapshot this row was drawn
+				// from: a rename keeps focus and does not redraw, so spreading
+				// the snapshot here would write the old name back.
+				this.flushPendingName();
+				const current = this.entryAt(index);
+				if (current == undefined) {
+					return;
+				}
+				await this.replaceColor(index, { ...current, hex: normalizeHex(value, current.hex) });
 				this.display();
 			});
+
+		const commitName = debounce((value: string) => {
+			const current = this.entryAt(index);
+			if (current == undefined) {
+				return;
+			}
+			this.replaceColor(index, { ...current, name: value })
+				.catch(e => console.error(`text-color: could not save the palette: ${e}`));
+		}, RENAME_DELAY, true);
 
 		const name = new TextComponent(row);
 		name.setValue(color.name)
@@ -99,7 +134,8 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 					return;
 				}
 				name.inputEl.removeClass("ftc-name-invalid");
-				this.replaceColor(index, { ...this.plugin.settings.palette[index], name: value });
+				this.pendingName = commitName;
+				commitName(value);
 			});
 		name.inputEl.addClass("ftc-palette-name");
 		// the name shows itself in its color.
@@ -119,13 +155,27 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 			.setIcon("trash")
 			.setTooltip("delete color")
 			.onClick(async () => {
+				this.flushPendingName();
+				const name = this.entryAt(index)?.name ?? color.name;
 				if (await confirmByModal(this.app,
-					`"${color.name}" disappears from the menus. Hexes already in your notes keep rendering.`,
-					`Delete color ${color.name}`)) {
+					`"${name}" disappears from the menus. Hexes already in your notes keep rendering.`,
+					`Delete color ${name}`)) {
 					await this.updatePalette(this.plugin.settings.palette.filter((_, i) => i !== index));
 					this.display();
 				}
 			});
+	}
+
+	/** Write a rename the user has stopped typing but not yet paid for. */
+	private flushPendingName(): void {
+		const pending = this.pendingName;
+		this.pendingName = null;
+		pending?.run();
+	}
+
+	/** The palette entry a row stands for, as it is right now. */
+	private entryAt(index: number): PaletteColor | undefined {
+		return this.plugin.settings.palette[index];
 	}
 
 	private replaceColor(index: number, replacement: PaletteColor): Promise<void> {
@@ -133,6 +183,7 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 	}
 
 	private async moveColor(index: number, direction: number): Promise<void> {
+		this.flushPendingName();
 		const palette = [...this.plugin.settings.palette];
 		const target = index + direction;
 		if (target < 0 || target >= palette.length) {

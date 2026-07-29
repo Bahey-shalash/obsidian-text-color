@@ -5,7 +5,7 @@ import {
 	Notice,
 	Plugin,
 } from 'obsidian';
-import { Prec, Compartment } from "@codemirror/state";
+import { Prec, Extension } from "@codemirror/state";
 import { keymap, EditorView } from '@codemirror/view';
 
 import { DEFAULT_SETTINGS, FastTextColorPluginSettings, migrateSettings, SETTINGS_VERSION } from 'src/settings/settings';
@@ -30,7 +30,15 @@ export default class FastTextColorPlugin extends Plugin {
 	/** hex of the color applied last, seeding "apply latest" and the picker. */
 	private lastUsedHex!: string;
 
-	private settingsCompartment!: Compartment;
+	/**
+	 * The settings as the editors see them. Registered as an array and then
+	 * rewritten in place: obsidian rebuilds every editor's configuration from
+	 * this array, so an editor opened after a settings change gets the current
+	 * value too. Handing `settingsFacet.of(this.settings)` to
+	 * `registerEditorExtension` directly would freeze the settings of every
+	 * future editor at the ones loaded at startup.
+	 */
+	private editorSettings: Extension[] = [];
 
 	async onload() {
 		await this.loadSettings();
@@ -42,8 +50,8 @@ export default class FastTextColorPlugin extends Plugin {
 		this.registerMarkdownPostProcessor((el, ctx) => textColorPostProcessor(el, ctx, this.settings), -1000);
 
 		// makes the settings available inside the editor extensions.
-		this.settingsCompartment = new Compartment();
-		this.registerEditorExtension(this.settingsCompartment.of(settingsFacet.of(this.settings)));
+		this.editorSettings = [settingsFacet.of(this.settings)];
+		this.registerEditorExtension(this.editorSettings);
 
 		this.registerEditorExtension(
 			Prec.high(keymap.of([{
@@ -189,17 +197,20 @@ export default class FastTextColorPlugin extends Plugin {
 		this.refreshViews();
 	}
 
-	/** Push the current settings into every open markdown view, not just the active one. */
+	/**
+	 * Push the current settings into every markdown view: the open ones through
+	 * a reconfigure, the ones opened later through the registered array they
+	 * are built from.
+	 */
 	private refreshViews(): void {
+		this.editorSettings.length = 0;
+		this.editorSettings.push(settingsFacet.of(this.settings));
+		this.app.workspace.updateOptions();
+
+		// reading mode renders once and keeps the result; it has to be
+		// asked to render again with the new settings.
 		this.app.workspace.getLeavesOfType("markdown").forEach(leaf => {
 			const view = leaf.view as MarkdownView;
-
-			editorViewOf(view)?.dispatch({
-				effects: this.settingsCompartment.reconfigure(settingsFacet.of(this.settings)),
-			});
-
-			// reading mode renders once and keeps the result; it has to be
-			// asked to render again with the new settings.
 			if (view.getMode?.() === "preview") {
 				view.previewMode?.rerender(true);
 			}

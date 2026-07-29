@@ -49,6 +49,22 @@ describe("enclosingExpression", () => {
 		const doc = "tail ~={red}body=~ more";
 		expect(enclosingExpression(stateOf(doc), 1)).toBe(null);
 	});
+
+	/**
+	 * Markup inside literal code is a code sample. Every consumer of this
+	 * lookup edits or recolors what it answers with, and none of them may do
+	 * that to code, so the refusal belongs here rather than in each of them.
+	 */
+	test("null inside a closed code span", () => {
+		const doc = "text `~={red}sample=~` more";
+		expect(enclosingExpression(stateOf(doc), doc.indexOf("sample"))).toBe(null);
+	});
+
+	test("an unbalanced backtick is plain text, so its markup still counts (#41)", () => {
+		const doc = "text `~={red}sample=~ more";
+		expect(enclosingExpression(stateOf(doc), doc.indexOf("sample"))?.from)
+			.toBe(doc.indexOf("~={red}"));
+	});
 });
 
 describe("isClosedCodeSection", () => {

@@ -75,6 +75,44 @@ describe("removeColor", () => {
 	});
 });
 
+/**
+ * Markup inside a closed code span is a code sample. Live preview renders it
+ * literally and the auto hexifier refuses to rewrite it, so the one command
+ * that edits markup away must refuse too — otherwise documenting the syntax in
+ * a note is enough to have it silently rewritten.
+ */
+describe("literal code is never edited", () => {
+	const doc = "text `~={#ff0000}sample=~` more";
+
+	test("a selection across a code span leaves it alone", () => {
+		const { view, text } = viewOf(doc, [[0, doc.length]]);
+		removeColor(editor, view);
+		expect(text()).toBe(doc);
+	});
+
+	test("a cursor inside a code span leaves it alone", () => {
+		const at = doc.indexOf("sample");
+		const { view, text } = viewOf(doc, [[at, at]]);
+		removeColor(editor, view);
+		expect(text()).toBe(doc);
+	});
+
+	test("an unbalanced backtick is plain text, so its markup is still removed", () => {
+		const stray = "text `~={#ff0000}sample=~ more";
+		const at = stray.indexOf("sample");
+		const { view, text } = viewOf(stray, [[at, at]]);
+		removeColor(editor, view);
+		expect(text()).toBe("text `sample more");
+	});
+
+	test("real markup outside the code span is still removed", () => {
+		const mixed = "`~={#ff0000}a=~` ~={#00ff00}b=~";
+		const { view, text } = viewOf(mixed, [[0, mixed.length]]);
+		removeColor(editor, view);
+		expect(text()).toBe("`~={#ff0000}a=~` b");
+	});
+});
+
 describe("removeColorAt", () => {
 	test("strips the expression at a position", () => {
 		const doc = "a ~={#ff8800}body=~ b";

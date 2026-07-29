@@ -4,7 +4,7 @@
 import { textColorPostProcessor } from "src/reading/TextColorPostProcessor";
 import { DEFAULT_SETTINGS, FastTextColorPluginSettings } from "src/settings/settings";
 import type { MarkdownPostProcessorContext } from "obsidian";
-import { setupDom, block } from "./support/dom";
+import { setupDom, block, readColoring } from "./support/dom";
 
 beforeAll(setupDom);
 
@@ -84,6 +84,52 @@ describe("colors do not escape block elements (#60, #55)", () => {
 	test("prefix without suffix colors to the end of its block", () => {
 		const el = render("<p>~={red}colored to end</p>");
 		expect(spanWith(el, "#e93147")?.textContent).toBe("colored to end");
+	});
+});
+
+/**
+ * A color that opens inside an inline element and closes outside it cannot be
+ * one span: adopting the text that follows would render it bold, italic or
+ * linked when the source never said so. The color continues as a second span
+ * at the level the text actually lives at.
+ */
+describe("a color that outlives the element it opened in", () => {
+	test("text after the element is colored but not bolded", () => {
+		// source: **~={red}bold** normal=~ tail
+		const el = render("<p><strong>~={red}bold</strong> normal=~ tail</p>");
+
+		expect(el.textContent).toBe("bold normal tail");
+		expect(el.querySelector("strong")?.textContent).toBe("bold");
+
+		const { text, colors } = readColoring(el);
+		expect(text).toBe("bold normal tail");
+		expect(colors.slice(0, "bold normal".length)).toEqual(
+			new Array("bold normal".length).fill("#e93147"));
+		expect(colors.slice("bold normal".length)).toEqual([null, null, null, null, null]);
+	});
+
+	test("an outer color still covers what follows the inner one", () => {
+		// source: **~={red}a ~={blue}b** c=~ d=~
+		const el = render("<p><strong>~={red}a ~={blue}b</strong> c=~ d=~</p>");
+
+		const { text, colors } = readColoring(el);
+		expect(text).toBe("a b c d");
+		// "a " red, "b" blue, " c" still blue, " d" back to red — none of it plain
+		expect(colors).toEqual([
+			"#e93147", "#e93147",
+			"#086ddd",
+			"#086ddd", "#086ddd",
+			"#e93147", "#e93147",
+		]);
+	});
+
+	test("markup behind the closing marker is still rendered", () => {
+		// source: *~={red}a* b=~ c ~={blue}d=~ e
+		const el = render("<p><em>~={red}a</em> b=~ c ~={blue}d=~ e</p>");
+
+		expect(el.textContent).toBe("a b c d e");
+		expect(el.querySelector("em")?.textContent).toBe("a");
+		expect(spanWith(el, "#086ddd")?.textContent).toBe("d");
 	});
 });
 

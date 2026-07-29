@@ -6,9 +6,7 @@ import { settingsFacet } from "src/editor/SettingsFacet";
 import { removeColorAt } from "src/editor/TextColorFunctions";
 import { enclosingExpression } from "src/editor/treeQueries";
 import { applyColorStyle } from "src/color/ColorStyle";
-import { resolveTokenHex } from "src/color/resolveToken";
 import { CustomColorModal } from "src/ui/CustomColorModal";
-import type { FastTextColorPluginSettings } from "src/settings/settings";
 
 /**
  * The swatch shown in front of a visible color token (vscode style). Clicking
@@ -27,22 +25,23 @@ export class ColorWidget extends WidgetType {
 		readonly token: string,
 		readonly from: number,
 		readonly to: number,
+		/** what the token resolves to, which is what the swatch shows */
+		readonly hex: string | null,
 	) {
 		super();
 	}
 
 	eq(other: ColorWidget): boolean {
-		return other.token == this.token && other.from == this.from && other.to == this.to;
+		return other.token == this.token && other.from == this.from
+			&& other.to == this.to && other.hex == this.hex;
 	}
 
 	toDOM(view: EditorView): HTMLElement {
-		const settings = view.state.facet(settingsFacet);
 		const doc = view.dom.ownerDocument;
 
 		const swatch = doc.createElement("span");
-		const hex = resolveTokenHex(this.token, settings);
-		if (hex != null) {
-			applyColorStyle(swatch, hex);
+		if (this.hex != null) {
+			applyColorStyle(swatch, this.hex);
 		}
 		swatch.addClass("ftc-color-delimiter");
 
@@ -86,7 +85,7 @@ export class ColorWidget extends WidgetType {
 		menu.addItem(item => {
 			item.setTitle("Custom...")
 				.setIcon("pipette")
-				.onClick(() => this.openCustomPicker(view, settings));
+				.onClick(() => this.openCustomPicker(view));
 		});
 
 		menu.addItem(item => {
@@ -106,13 +105,13 @@ export class ColorWidget extends WidgetType {
 	 * current state at click time; the range being replaced is the token this
 	 * widget decorates, same as the palette entries above.
 	 */
-	private openCustomPicker(view: EditorView, settings: FastTextColorPluginSettings): void {
+	private openCustomPicker(view: EditorView): void {
 		const expression = enclosingExpression(view.state, this.from);
 		const sample = expression == null ? "" : expressionBody(view.state, expression);
 
 		new CustomColorModal(
 			view.state.field(editorInfoField).app,
-			resolveTokenHex(this.token, settings) ?? "#ff0000",
+			this.hex ?? "#ff0000",
 			sample,
 			hex => view.dispatch({ changes: { from: this.from, to: this.to, insert: hex } }),
 		).open();

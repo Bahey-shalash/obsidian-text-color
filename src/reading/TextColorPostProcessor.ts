@@ -29,11 +29,30 @@ export const textColorPostProcessor = (el: HTMLElement, context: MarkdownPostPro
 	}
 };
 
+/**
+ * One `~={token}` that has been opened and not yet closed.
+ *
+ * `span` is the span currently collecting this color's content. It is not
+ * fixed for the color's lifetime: markdown puts the opening marker and the
+ * text that follows it at different levels of the rendered tree (`**~={red}a**
+ * b=~`), and a color cannot be one span across those levels without dragging
+ * the text into an element it was never formatted by. So the color continues
+ * as a fresh span at whatever level the next content lives at, and `span`
+ * follows along — which also keeps the closing marker's remainder landing at
+ * the level the text came from.
+ */
+interface OpenColor {
+	/** the resolved color, or null for a token that does not name one */
+	hex: string | null;
+	/** the span collecting this color's content at the level being walked */
+	span: HTMLElement;
+}
+
 /** Everything one coloring pass needs to carry through the recursion. */
 interface RenderContext {
 	settings: FastTextColorPluginSettings;
-	/** currently open color spans, innermost last */
-	open: HTMLElement[];
+	/** currently open colors, innermost last */
+	open: OpenColor[];
 	/** the block's own document, which may belong to a pop out window */
 	doc: Document;
 }
@@ -64,6 +83,10 @@ function colorNode(node: Node, ctx: RenderContext): void {
 		const lengthBefore = node.childNodes.length;
 		const child = node.childNodes.item(i);
 
+		if (child.nodeType == Node.TEXT_NODE && !child.nodeValue) {
+			continue; // an empty remainder left behind by a marker
+		}
+
 		if (ctx.open.length > 0 && isBlockBoundary(child)) {
 			ctx.open.length = 0;
 		}
@@ -79,73 +102,112 @@ function colorNode(node: Node, ctx: RenderContext): void {
 			continue;
 		}
 
-		if (child.nodeValue) {
-			colorTextNode(child as Text, ctx);
-		}
+		colorTextNode(child as Text, ctx);
 	}
 }
 
 /**
- * Inline content rendered after an open color span belongs inside it: markdown
- * emits `<strong>`, links and the following text as siblings, so they are
- * adopted into the span until its closing marker is found.
+ * Inline content rendered after an open color belongs inside it: markdown emits
+ * `<strong>`, links and the following text as siblings, so they are adopted
+ * into the open span until the closing marker is found.
+ *
+ * Adoption only ever happens between siblings. Content one level up from the
+ * span was not formatted by the element the span sits in, so pulling it in
+ * would render it bold, italic or linked when the source never said so; the
+ * color continues as a new span at this level instead.
  */
 function moveIntoOpenColor(child: Node, ctx: RenderContext): void {
 	const innermost = ctx.open[ctx.open.length - 1];
-	if (innermost == undefined || innermost == child) {
+	const parent = child.parentNode;
+	if (innermost == undefined || innermost.span == child || parent == null) {
 		return;
 	}
-	if (child.compareDocumentPosition(innermost) & Node.DOCUMENT_POSITION_CONTAINS) {
-		// we are iterating above the span; nothing to adopt at this level.
-		return;
+	if (child.compareDocumentPosition(innermost.span) & Node.DOCUMENT_POSITION_CONTAINS) {
+		return; // already inside the open span; nothing to adopt.
 	}
 
-	child.parentNode?.removeChild(child);
-	innermost.appendChild(child);
+	if (innermost.span.parentNode != parent) {
+		innermost.span = newSpan(ctx, innermost.hex);
+		parent.insertBefore(innermost.span, child);
+	}
+
+	parent.removeChild(child);
+	innermost.span.appendChild(child);
 }
 
-/** Handle the first marker in a text node; the loop picks up the remainder. */
+/**
+ * Handle every marker in a text node.
+ *
+ * Each handler returns what is left behind the marker it consumed, and the
+ * loop carries on there. Following the remainder rather than leaving it to the
+ * caller's child walk is what keeps markup found behind a marker from being
+ * missed: the remainder does not always end up in the child list the caller is
+ * iterating.
+ */
 function colorTextNode(textNode: Text, ctx: RenderContext): void {
+	let rest: Text | null = textNode;
+	while (rest != null && rest.nodeValue) {
+		// closing the innermost color can leave the remainder outside a color
+		// that is still open — which the caller's walk would have handled for a
+		// child of its own, but this remainder is not one.
+		moveIntoOpenColor(rest, ctx);
+		rest = colorFirstMarker(rest, ctx);
+	}
+}
+
+/** Handle the first marker in a text node; answer with the text behind it. */
+function colorFirstMarker(textNode: Text, ctx: RenderContext): Text | null {
 	const text = textNode.nodeValue ?? "";
 	const open = firstMatch(text, OPEN);
 	const close = firstMatch(text, CLOSE);
 
 	if (open != null && (close == null || open.index < close.index)) {
-		openColor(textNode, text, open, ctx);
-	} else if (close != null) {
-		closeColor(textNode, text, close, ctx);
+		return openColor(textNode, text, open, ctx);
 	}
+	if (close != null) {
+		return closeColor(textNode, text, close, ctx);
+	}
+	return null;
 }
 
 /** ~={token}: start a span; the text behind the marker moves inside it. */
-function openColor(textNode: Text, text: string, marker: SyntaxMatch, ctx: RenderContext): void {
-	const span = ctx.doc.createElement("span");
+function openColor(textNode: Text, text: string, marker: SyntaxMatch, ctx: RenderContext): Text {
 	const hex = resolveTokenHex(tokenOf(marker.value), ctx.settings);
-	if (hex != null) {
-		applyColorStyle(span, hex, ctx.settings);
-	}
+	const span = newSpan(ctx, hex);
+	const rest = ctx.doc.createTextNode(text.slice(marker.end));
 
 	textNode.nodeValue = text.slice(0, marker.index);
 	textNode.parentNode?.insertAfter(span, textNode);
-	span.appendChild(ctx.doc.createTextNode(text.slice(marker.end)));
+	span.appendChild(rest);
 
-	ctx.open.push(span);
+	ctx.open.push({ hex, span });
+	return rest;
 }
 
 /** =~: close the innermost span; the rest of the text continues after it. */
-function closeColor(textNode: Text, text: string, marker: SyntaxMatch, ctx: RenderContext): void {
+function closeColor(textNode: Text, text: string, marker: SyntaxMatch, ctx: RenderContext): Text {
 	const closed = ctx.open.pop();
+	const rest = ctx.doc.createTextNode(text.slice(marker.end));
 
 	if (closed == undefined) {
 		// stray closing marker with no open color: keep it as plain text
 		// and continue scanning behind it.
 		textNode.nodeValue = text.slice(0, marker.index) + marker.value;
-		textNode.parentNode?.insertAfter(ctx.doc.createTextNode(text.slice(marker.end)), textNode);
-		return;
+		textNode.parentNode?.insertAfter(rest, textNode);
+		return rest;
 	}
 
 	textNode.nodeValue = text.slice(0, marker.index);
-	closed.parentNode?.insertAfter(ctx.doc.createTextNode(text.slice(marker.end)), closed);
+	closed.span.parentNode?.insertAfter(rest, closed.span);
+	return rest;
+}
+
+function newSpan(ctx: RenderContext, hex: string | null): HTMLElement {
+	const span = ctx.doc.createElement("span");
+	if (hex != null) {
+		applyColorStyle(span, hex, ctx.settings);
+	}
+	return span;
 }
 
 /** Put the pre-coloring content back after a failed pass. */

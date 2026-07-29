@@ -1,4 +1,4 @@
-import type { Editor, EditorPosition, EditorSelection, EditorSelectionOrCaret } from "obsidian";
+import type { Editor, EditorPosition, EditorSelection, EditorSelectionOrCaret, EditorTransaction } from "obsidian";
 
 /**
  * A document with cursors, implementing the slice of obsidian's Editor that
@@ -7,6 +7,7 @@ import type { Editor, EditorPosition, EditorSelection, EditorSelectionOrCaret } 
  */
 export class FakeEditor {
 	private selections: EditorSelection[] = [];
+	private transactions = 0;
 
 	constructor(private doc: string) { }
 
@@ -36,11 +37,43 @@ export class FakeEditor {
 		return this.selections.map(selection => this.posToOffset(selection.head));
 	}
 
+	/** how many separate steps the document was changed in */
+	get transactionCount(): number { return this.transactions; }
+
+	get selectionOffsets(): [number, number][] {
+		return this.selections.map(selection =>
+			[this.posToOffset(selection.anchor), this.posToOffset(selection.head)]);
+	}
+
 	asEditor(): Editor { return this as unknown as Editor; }
 
 	// -- the Editor surface under test -------------------------------------
 
 	listSelections(): EditorSelection[] { return this.selections; }
+
+	getValue(): string { return this.doc; }
+
+	/**
+	 * One step, the way obsidian applies it: every change is expressed against
+	 * the document as it is now, so they are applied last to first, and the
+	 * selections that come with them are read in the document that results.
+	 */
+	transaction(tx: EditorTransaction): void {
+		this.transactions++;
+		const changes = [...(tx.changes ?? [])].sort((a, b) => this.posToOffset(a.from) - this.posToOffset(b.from));
+
+		for (let i = changes.length - 1; i >= 0; i--) {
+			const change = changes[i];
+			this.replaceRange(change.text, change.from, change.to);
+		}
+
+		if (tx.selections != undefined) {
+			this.selections = tx.selections.map(range => ({
+				anchor: range.from,
+				head: range.to ?? range.from,
+			}));
+		}
+	}
 
 	setSelections(ranges: EditorSelectionOrCaret[]): void {
 		this.selections = ranges.map(range => ({

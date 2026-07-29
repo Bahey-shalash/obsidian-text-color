@@ -19,7 +19,17 @@ export function buildTextColorDecorations(
 	const builder = new RangeSetBuilder<Decoration>();
 	const sliceDoc = (from: number, to: number) => state.sliceDoc(from, to);
 
+	// an expression that reaches across the gap between two visible ranges is
+	// entered once per range. Decorating it twice would hand the builder a
+	// range that starts before the last one it took, which throws.
+	const decorated = new Set<number>();
+
 	const decorate = (node: Parameters<typeof decorateExpression>[0]) => {
+		if (decorated.has(node.from)) {
+			return;
+		}
+		decorated.add(node.from);
+
 		try {
 			decorateExpression(node, builder, state);
 		} catch (e) {

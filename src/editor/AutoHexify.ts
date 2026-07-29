@@ -1,4 +1,4 @@
-import { EditorState } from "@codemirror/state";
+import { EditorState, Transaction } from "@codemirror/state";
 import { EditorView, ViewUpdate } from "@codemirror/view";
 import { textColorParserField } from "src/editor/TextColorStateField";
 import { settingsFacet } from "src/editor/SettingsFacet";
@@ -78,6 +78,11 @@ export function findNameConversions(
 	return conversions;
 }
 
+/** Is this update the user undoing or redoing, rather than editing? */
+function isHistoryUpdate(update: ViewUpdate): boolean {
+	return update.transactions.some(tr => tr.isUserEvent("undo") || tr.isUserEvent("redo"));
+}
+
 /**
  * Editor extension: a palette name typed into the markup (~={yellow}) is
  * rewritten to its hex as soon as the token is complete, so the note stores
@@ -87,6 +92,14 @@ export function findNameConversions(
  */
 export const autoHexify = EditorView.updateListener.of((update: ViewUpdate) => {
 	if (!update.docChanged || update.view.composing) {
+		return;
+	}
+
+	// an undo restores the name, which is a document change like any other:
+	// converting it again would make the conversion impossible to undo, and
+	// every further undo would land on the reconversion instead of moving
+	// back through the user's own edits.
+	if (isHistoryUpdate(update)) {
 		return;
 	}
 
@@ -111,7 +124,12 @@ export const autoHexify = EditorView.updateListener.of((update: ViewUpdate) => {
 			if (update.view.state.doc != expectedDoc) {
 				return;
 			}
-			update.view.dispatch({ changes: conversions });
+			update.view.dispatch({
+				changes: conversions,
+				// not an undo step of its own: undoing the keystroke that
+				// completed the token takes the conversion with it.
+				annotations: Transaction.addToHistory.of(false),
+			});
 		} catch (e) {
 			console.error(`text-color: auto hexify failed: ${e}`);
 		}
