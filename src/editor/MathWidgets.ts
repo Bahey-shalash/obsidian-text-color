@@ -3,6 +3,7 @@ import { settingsFacet } from "src/editor/SettingsFacet";
 import { isLivePreview } from "src/editor/EditorContext";
 import { expressionColorAt } from "src/editor/treeQueries";
 import { resolveTokenHex } from "src/color/resolveToken";
+import { applyColorStyle, clearColorStyle } from "src/color/ColorStyle";
 
 const MARKER_ATTRIBUTE = "data-ftc-math";
 
@@ -36,8 +37,7 @@ export function colorMathWidgets(view: EditorView): void {
 			return;
 		}
 
-		el.style.setProperty("--ftc-color", hex);
-		el.style.color = "var(--ftc-color)";
+		applyColorStyle(el, hex);
 		el.setAttribute(MARKER_ATTRIBUTE, "");
 	});
 }
@@ -54,7 +54,6 @@ function clearColoring(el: HTMLElement): void {
 	if (!el.hasAttribute(MARKER_ATTRIBUTE)) {
 		return;
 	}
-	el.style.removeProperty("--ftc-color");
-	el.style.removeProperty("color");
+	clearColorStyle(el);
 	el.removeAttribute(MARKER_ATTRIBUTE);
 }

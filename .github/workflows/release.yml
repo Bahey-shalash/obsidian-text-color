@@ -11,8 +11,12 @@ jobs:
 
     # `gh release create` writes to the repo. New repositories default the
     # GITHUB_TOKEN to read only, which fails the release step with a 403.
+    # `id-token` and `attestations` are what the provenance step below signs
+    # with; without them it fails rather than being skipped.
     permissions:
       contents: write
+      id-token: write
+      attestations: write
 
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +32,14 @@ jobs:
           npm run build
           npm run lint
           npm test
+
+      # Cryptographic provenance for the two built files, so anyone can verify
+      # with `gh attestation verify` that they came out of this repository.
+      # manifest.json is committed rather than built, so it is not attested.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: "main.js, styles.css"
 
       - name: Create release
         env:

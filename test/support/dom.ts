@@ -17,8 +17,18 @@ export function setupDom(): void {
 	(globalThis as any).Node = dom.window.Node;
 	(globalThis as any).HTMLElement = dom.window.HTMLElement;
 
-	(dom.window.HTMLElement.prototype as any).addClass = function (cls: string) {
-		this.classList.add(cls);
+	(dom.window.HTMLElement.prototype as any).addClass = function (...classes: string[]) {
+		this.classList.add(...classes);
+	};
+	(dom.window.HTMLElement.prototype as any).removeClass = function (...classes: string[]) {
+		this.classList.remove(...classes);
+	};
+	// obsidian's setCssProps writes custom properties into the style attribute,
+	// which is where the assertions below read the color back out of.
+	(dom.window.HTMLElement.prototype as any).setCssProps = function (props: Record<string, string>) {
+		for (const [name, value] of Object.entries(props)) {
+			this.style.setProperty(name, value);
+		}
 	};
 	(dom.window.Node.prototype as any).insertAfter = function (node: Node, ref: Node) {
 		this.insertBefore(node, ref.nextSibling);

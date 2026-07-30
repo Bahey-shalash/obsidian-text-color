@@ -2,6 +2,7 @@ import {
 	Editor,
 	MarkdownView,
 	Menu,
+	MenuItem,
 	Notice,
 	Plugin,
 } from 'obsidian';
@@ -114,8 +115,10 @@ export default class FastTextColorPlugin extends Plugin {
 					item.setSection("selection")
 						.setTitle("Color")
 						.setIcon("palette");
-					// @ts-ignore setSubmenu is not in the public api
-					const submenu: Menu = item.setSubmenu();
+					// setSubmenu is not in the public api; name the shape rather
+					// than silencing the checker, so a change to it is a
+					// compile error here instead of a crash on a user's machine.
+					const submenu: Menu = (item as MenuItem & { setSubmenu(): Menu }).setSubmenu();
 
 					this.settings.palette.forEach(color => {
 						submenu.addItem((subitem) => {
@@ -172,7 +175,7 @@ export default class FastTextColorPlugin extends Plugin {
 	// ----------------------------------------------------------------------
 
 	async loadSettings() {
-		const raw = await this.loadData();
+		const raw: unknown = await this.loadData();
 		const { settings, dropped } = migrateSettings(raw ?? DEFAULT_SETTINGS);
 		this.settings = settings;
 
@@ -220,6 +223,6 @@ export default class FastTextColorPlugin extends Plugin {
 
 /** The underlying CodeMirror view of a markdown view; not in the public api. */
 function editorViewOf(view: MarkdownView | { editor?: Editor } | null): EditorView | null {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- editor.cm is not in the public api
-	return ((view?.editor as any)?.cm as EditorView) ?? null;
+	const editor = view?.editor as (Editor & { cm?: EditorView }) | undefined;
+	return editor?.cm ?? null;
 }

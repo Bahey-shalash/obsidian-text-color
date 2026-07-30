@@ -5,7 +5,7 @@ import { Menu, editorInfoField } from "obsidian";
 import { settingsFacet } from "src/editor/SettingsFacet";
 import { removeColorAt } from "src/editor/TextColorFunctions";
 import { enclosingExpression } from "src/editor/treeQueries";
-import { applyColorStyle } from "src/color/ColorStyle";
+import { colorProps } from "src/color/ColorStyle";
 import { CustomColorModal } from "src/ui/CustomColorModal";
 
 /**
@@ -39,9 +39,11 @@ export class ColorWidget extends WidgetType {
 	toDOM(view: EditorView): HTMLElement {
 		const doc = view.dom.ownerDocument;
 
+		// createElement, not createEl; see MarkerWidget.toDOM for why.
 		const swatch = doc.createElement("span");
 		if (this.hex != null) {
-			applyColorStyle(swatch, this.hex);
+			// the swatch fills itself with the color; it does not carry text.
+			swatch.setCssProps(colorProps(this.hex));
 		}
 		swatch.addClass("ftc-color-delimiter");
 

@@ -1,3 +1,26 @@
+/*
+ * Colored text. The hex arrives per instance as `--ftc-color`, set inline; the
+ * declarations live here so themes and css snippets can override them without
+ * having to out-shout an inline style.
+ */
+
+/*
+ * `input.` is spelled out for the same reason `.ftc-name-invalid` spells out
+ * its states: obsidian colors text inputs through `input[type='text']`, which
+ * at (0,1,1) beats a bare `.ftc-colored` at (0,1,0). The settings tab colors
+ * a palette name in its own color by putting this class on a text input, and
+ * without the second selector that name renders in `--text-normal`.
+ */
+.ftc-colored,
+input.ftc-colored {
+  color: var(--ftc-color);
+}
+
+/* `--code-normal` is what obsidian colors inline code with. */
+.ftc-colored.ftc-code-section {
+  --code-normal: var(--ftc-color);
+}
+
 /* color delimiter icon */
 
 .ftc-color-delimiter {

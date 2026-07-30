@@ -1,3 +1,4 @@
+@charset "UTF-8";
 /* SETTINGS */
 .ftc-palette {
   display: flex;
@@ -39,8 +40,40 @@
   border-color: var(--interactive-accent);
 }
 
-.ftc-name-invalid {
-  border-color: var(--text-error) !important;
+/*
+ * The invalid name field. `:hover` and `:focus` are spelled out on purpose:
+ * obsidian styles text inputs through `input[type='text']:focus` and `:hover`,
+ * and the field is focused for as long as the user is typing the name — a
+ * plain `.ftc-name-invalid` would lose to those and drop the red border
+ * exactly when it is needed. Matching their shape wins on source order without
+ * `!important`, so a theme can still override it.
+ */
+input.ftc-name-invalid,
+input.ftc-name-invalid:hover,
+input.ftc-name-invalid:focus {
+  border-color: var(--text-error);
+}
+
+/*
+ * Colored text. The hex arrives per instance as `--ftc-color`, set inline; the
+ * declarations live here so themes and css snippets can override them without
+ * having to out-shout an inline style.
+ */
+/*
+ * `input.` is spelled out for the same reason `.ftc-name-invalid` spells out
+ * its states: obsidian colors text inputs through `input[type='text']`, which
+ * at (0,1,1) beats a bare `.ftc-colored` at (0,1,0). The settings tab colors
+ * a palette name in its own color by putting this class on a text input, and
+ * without the second selector that name renders in `--text-normal`.
+ */
+.ftc-colored,
+input.ftc-colored {
+  color: var(--ftc-color);
+}
+
+/* `--code-normal` is what obsidian colors inline code with. */
+.ftc-colored.ftc-code-section {
+  --code-normal: var(--ftc-color);
 }
 
 /* color delimiter icon */

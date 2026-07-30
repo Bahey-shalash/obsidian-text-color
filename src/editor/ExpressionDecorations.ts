@@ -4,7 +4,7 @@ import { SyntaxNodeRef } from "@lezer/common";
 import { MarkerWidget } from "src/editor/MarkerWidget";
 import { ColorWidget } from "src/editor/ColorWidget";
 import { settingsFacet } from "src/editor/SettingsFacet";
-import { colorStyle } from "src/color/ColorStyle";
+import { colorClasses, colorPropStyle } from "src/color/ColorStyle";
 import { resolveTokenHex } from "src/color/resolveToken";
 import { textColorParserField } from "src/editor/TextColorStateField";
 import { shouldDescendInto } from "src/syntax";
@@ -86,8 +86,10 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 		if (hex == null) {
 			return; // unknown name or empty token: leave the text alone.
 		}
-		builder.add(range.from, range.to,
-			Decoration.mark({ attributes: { style: colorStyle(hex, settings) } }));
+		builder.add(range.from, range.to, Decoration.mark({
+			class: colorClasses(settings),
+			attributes: { style: colorPropStyle(hex) },
+		}));
 	};
 
 	const hideMarker = (node: SyntaxNodeRef) => {

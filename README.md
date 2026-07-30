@@ -12,7 +12,7 @@ Color text in Obsidian with a hex-based markup syntax. The note stores a plain h
 ## Features
 
 - Hex-in-the-note markup: `~={#rrggbb}colored text=~` — no configuration attached, notes render the same on any machine
-- Identical rendering in live preview, reading mode and PDF export (pure inline styles, by construction)
+- Identical rendering in live preview, reading mode and PDF export (all three share one style definition, by construction)
 - Name-to-hex palette: menus and the command suggester show names, notes always receive the hex
 - Typing a palette name by hand (`~={yellow}`) is rewritten to its hex the moment the token completes
 - Interactive delimiter: a small color swatch in front of the visible hex (VS Code style), with a hover menu to change or remove the color

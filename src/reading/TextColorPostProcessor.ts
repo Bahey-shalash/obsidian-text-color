@@ -291,6 +291,7 @@ function closeColor(textNode: Text, text: string, marker: SyntaxMatch, ctx: Rend
 }
 
 function newSpan(ctx: RenderContext, hex: string | null): HTMLElement {
+	// createElement, not createEl; see MarkerWidget.toDOM for why.
 	const span = ctx.doc.createElement("span");
 	if (hex != null) {
 		applyColorStyle(span, hex, ctx.settings);

@@ -44,6 +44,16 @@
 	}
 }
 
-.ftc-name-invalid {
-	border-color: var(--text-error) !important;
+/*
+ * The invalid name field. `:hover` and `:focus` are spelled out on purpose:
+ * obsidian styles text inputs through `input[type='text']:focus` and `:hover`,
+ * and the field is focused for as long as the user is typing the name — a
+ * plain `.ftc-name-invalid` would lose to those and drop the red border
+ * exactly when it is needed. Matching their shape wins on source order without
+ * `!important`, so a theme can still override it.
+ */
+input.ftc-name-invalid,
+input.ftc-name-invalid:hover,
+input.ftc-name-invalid:focus {
+	border-color: var(--text-error);
 }

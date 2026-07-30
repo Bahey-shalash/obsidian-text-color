@@ -1,6 +1,6 @@
 import type FastTextColorPlugin from "src/main";
 import { App, ColorComponent, Debouncer, ExtraButtonComponent, PluginSettingTab, Setting, TextComponent, debounce } from "obsidian";
-import { colorStyle } from "src/color/ColorStyle";
+import { applyColorStyle } from "src/color/ColorStyle";
 import { normalizeHex } from "src/color/InlineColor";
 import { PaletteColor, nextFreeName } from "src/settings/settings";
 import { confirmByModal } from "src/ui/ConfirmationModal";
@@ -163,7 +163,7 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 			});
 		name.inputEl.addClass("ftc-palette-name");
 		// the name shows itself in its color.
-		name.inputEl.setAttr("style", colorStyle(color.hex));
+		applyColorStyle(name.inputEl, color.hex);
 
 		new ExtraButtonComponent(row)
 			.setIcon("chevron-up")

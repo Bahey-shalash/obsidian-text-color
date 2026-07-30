@@ -1,6 +1,6 @@
 import { App, ColorComponent, Modal, Setting, TextComponent } from "obsidian";
 import { parseHex, toPickerHex, normalizeHex } from "src/color/InlineColor";
-import { colorStyle } from "src/color/ColorStyle";
+import { applyColorStyle } from "src/color/ColorStyle";
 
 /**
  * Modal that lets the user pick an arbitrary hex color. A pure picker: what
@@ -66,7 +66,7 @@ export class CustomColorModal extends Modal {
 
 		this.updatePreview();
 		// the modal may live in a pop out window; use that window's timer.
-		activeWindow.setTimeout(() => this.text?.inputEl.focus(), 0);
+		contentEl.win.setTimeout(() => this.text?.inputEl.focus(), 0);
 	}
 
 	onClose(): void {
@@ -102,7 +102,7 @@ export class CustomColorModal extends Modal {
 	}
 
 	private updatePreview() {
-		this.preview.setAttribute("style", colorStyle(this.hex));
+		applyColorStyle(this.preview, this.hex);
 	}
 
 	private apply() {
