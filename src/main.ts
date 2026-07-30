@@ -177,7 +177,7 @@ export default class FastTextColorPlugin extends Plugin {
 		this.settings = settings;
 
 		if (dropped.length > 0) {
-			console.warn(`text-color: dropped ${dropped.length} setting(s) whose value is not a color: ${dropped.join(", ")}`);
+			console.warn(`colors: dropped ${dropped.length} setting(s) whose value is not a color: ${dropped.join(", ")}`);
 		}
 
 		const stored = raw as { version?: string, legacy?: unknown } | null;

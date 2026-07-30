@@ -25,3 +25,6 @@ data - Kopie.json
 # Exclude debug data files
 data_old.json
 TODO.md
+
+# local build helpers, machine specific paths
+Makefile

@@ -141,3 +141,46 @@ describe("removeColorAt", () => {
 		expect(text()).toBe(doc);
 	});
 });
+
+/**
+ * A math block wears its color as latex, not as markup, so that is what has to
+ * come off it. See `syntax/mathColor.ts` for why it is latex in the first
+ * place.
+ */
+describe("removeColor on a math block", () => {
+	test("takes the color command and its line away", () => {
+		const doc = "$$\n\\color{#a882ff}\nA^{T}A\n$$";
+		const { view, text } = viewOf(doc, [[0, doc.length]]);
+		removeColor(editor, view);
+		expect(text()).toBe("$$\nA^{T}A\n$$");
+	});
+
+	test("takes an inline color command away without eating the latex", () => {
+		const doc = "$$ \\color{#a882ff} A^{T}A\n= B $$";
+		const { view, text } = viewOf(doc, [[0, doc.length]]);
+		removeColor(editor, view);
+		expect(text()).toBe("$$ A^{T}A\n= B $$");
+	});
+
+	test("a cursor inside the block is enough", () => {
+		const doc = "$$\n\\color{#a882ff}\nA^{T}A\n$$";
+		const at = doc.indexOf("A^{T}A");
+		const { view, text } = viewOf(doc, [[at, at]]);
+		removeColor(editor, view);
+		expect(text()).toBe("$$\nA^{T}A\n$$");
+	});
+
+	test("a color command sitting inside the latex comes off too", () => {
+		const doc = "$$\nA = \\color{#a882ff} B\n$$";
+		const { view, text } = viewOf(doc, [[0, doc.length]]);
+		removeColor(editor, view);
+		expect(text()).toBe("$$\nA = B\n$$");
+	});
+
+	test("an uncolored block is left exactly as it was", () => {
+		const doc = "$$\nA^{T}A\n$$";
+		const { view, text } = viewOf(doc, [[0, doc.length]]);
+		removeColor(editor, view);
+		expect(text()).toBe(doc);
+	});
+});

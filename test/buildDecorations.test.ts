@@ -139,6 +139,25 @@ describe("code sections", () => {
 		]);
 	});
 
+	/**
+	 * The grammar only knows single backticks, so a ``` fence reaches the walk
+	 * as an ordinary pair of them and the whole body of the block looks like
+	 * one inline code span. `colorCodeSection` is a setting about inline code;
+	 * letting it repaint a fenced block takes obsidian's syntax highlighting
+	 * with it.
+	 */
+	test("a fenced block is never colored, whatever the setting says", () => {
+		const doc = "~={red}\n```c\nint main(){\nreturn 0;\n}\n```\n=~";
+		const body = ["int main(){", "return 0;", "}", "```c"];
+
+		for (const colorCodeSection of [false, true]) {
+			const colored = renderedOf(doc, colorCodeSection)
+				.filter(entry => !entry.endsWith("hidden"))
+				.join("\n");
+			body.forEach(line => expect(colored).not.toContain(line));
+		}
+	});
+
 	test("a closed code span is colored as one piece when the setting is on", () => {
 		expect(renderedOf("lead ~={red}a `b` c=~ trail", true)).toEqual([
 			'"~={red}" hidden',
@@ -161,3 +180,37 @@ function stylesOf(set: ReturnType<typeof buildTextColorDecorations>, length: num
 	});
 	return hexes;
 }
+
+/**
+ * Blocks that render themselves, in the decorator.
+ *
+ * Reading mode skips a whole section whose source is a code or math block, so
+ * decorating inside one here is how the two renderers end up disagreeing about
+ * the same note. The guard has to hold for the runs marked inside an unbalanced
+ * code section too: those are not tree nodes, and one can start in ordinary
+ * text and carry straight on through a fence.
+ */
+describe("blocks are never decorated", () => {
+	test("markup inside a $$ block is left alone, as reading mode leaves it", () => {
+		expect(renderedOf("$$\n~={red}x=~\n$$")).toEqual([]);
+	});
+
+	test("markup inside a ``` block is left alone", () => {
+		expect(renderedOf("```c\n~={red}int x;=~\n```")).toEqual([]);
+	});
+
+	test("a run reaching into a fence stops at its edge", () => {
+		const rendered = renderedOf("~={red}a `b\n~~~\ncode\n~~~\ntail=~");
+		expect(rendered.some(entry => entry.includes("code"))).toBe(false);
+		expect(rendered.some(entry => entry.includes("~~~"))).toBe(false);
+		expect(rendered).toContain(`"a " ${RED}`);
+	});
+
+	test("prose on the far side of a fence is still colored", () => {
+		expect(renderedOf("lead ~={red}hello=~ trail")).toEqual([
+			'"~={red}" hidden',
+			`"hello" ${RED}`,
+			'"=~" hidden',
+		]);
+	});
+});

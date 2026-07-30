@@ -1,9 +1,20 @@
-import { Editor, EditorChange, EditorPosition, EditorRangeOrCaret } from "obsidian";
+import { Editor, EditorPosition, EditorRangeOrCaret, Notice } from "obsidian";
 import { EditorView } from "@codemirror/view";
 import { SyntaxNode, SyntaxNodeRef } from "@lezer/common";
 import { textColorParserField } from "src/editor/TextColorStateField";
 import { enclosingExpression } from "src/editor/treeQueries";
-import { CLOSE_MARKER, openMarkerFor, shouldDescendInto } from "src/syntax";
+import {
+	CLOSE_MARKER,
+	ProtectedBlock,
+	blockAt,
+	isMathColorLine,
+	mathColorIn,
+	openMarkerFor,
+	openingLineWithColor,
+	overlapsProtectedBlock,
+	protectedBlocks,
+	shouldDescendInto,
+} from "src/syntax";
 
 interface Edit {
 	from: number;
@@ -19,10 +30,20 @@ interface Edit {
  * transaction: coloring is one action to the user, so it has to be one step to
  * undo, not one step per cursor. Every change is expressed against the
  * untouched document, which is what keeps them independent of each other.
+ *
+ * Code and display math blocks are routed around rather than written into —
+ * see `syntax/blocks.ts` for why neither survives a marker. A line inside one
+ * is left exactly as it was, so a selection that runs across a block still
+ * colors the prose on either side of it.
  */
 export function insertColor(hex: string, editor: Editor): void {
 	const open = openMarkerFor(hex);
+	const text = editor.getValue();
+	const blocks = protectedBlocks(text);
 
+	// every selection keeps an edit, even one that turns out to be a no-op:
+	// the transaction replaces the whole selection, so a cursor missing from
+	// the list below is a cursor deleted.
 	const edits: Edit[] = editor.listSelections()
 		.map(selection => {
 			const a = editor.posToOffset(selection.anchor);
@@ -34,25 +55,30 @@ export function insertColor(hex: string, editor: Editor): void {
 			from,
 			to,
 			insert: from == to
-				? open + CLOSE_MARKER
-				: fenceLines(editor.getRange(editor.offsetToPos(from), editor.offsetToPos(to)), open),
+				? (overlapsProtectedBlock(blocks, from, to) ? "" : open + CLOSE_MARKER)
+				: colorLines(text.slice(from, to), hex, open, from, blocks),
 		}));
 
-	if (edits.length == 0) {
+	const writes = (edit: Edit) => edit.insert != text.slice(edit.from, edit.to);
+
+	if (!edits.some(writes)) {
+		// silent when the selection simply already reads this way; a block is
+		// the only reason worth explaining, because the click looked ignored.
+		if (edits.some(edit => overlapsProtectedBlock(blocks, edit.from, edit.to))) {
+			new Notice("Nothing to color: code blocks keep their own highlighting, and a math block takes its color in latex.");
+		}
 		return;
 	}
 
-	const changes: EditorChange[] = edits.map(edit => ({
-		from: editor.offsetToPos(edit.from),
-		to: editor.offsetToPos(edit.to),
-		text: edit.insert,
-	}));
-
 	editor.transaction({
-		changes,
+		changes: edits.filter(writes).map(edit => ({
+			from: editor.offsetToPos(edit.from),
+			to: editor.offsetToPos(edit.to),
+			text: edit.insert,
+		})),
 		// positions in the document the transaction produces, which is not the
 		// one the editor can be asked about yet.
-		selections: selectionsAfterInsert(applyEdits(editor.getValue(), edits), edits, open.length),
+		selections: selectionsAfterInsert(applyEdits(text, edits), edits, open.length),
 	});
 }
 
@@ -75,11 +101,64 @@ function positionAt(text: string, offset: number): EditorPosition {
 	return { line: before.length - 1, ch: before[before.length - 1].length };
 }
 
-/** One fence pair per non empty line, so a color never spans a line break. */
-function fenceLines(text: string, open: string): string {
-	return text.split("\n")
-		.map(line => (line ? open + line + CLOSE_MARKER : line))
-		.join("\n");
+/**
+ * The replacement for a selection: one fence pair per non empty line, so a
+ * color never spans a line break.
+ *
+ * A line a block owns is not fenced. A code block keeps its own rendering and
+ * is passed through untouched; a math block is colored in latex instead, which
+ * is the only way to color one that both modes agree on — see
+ * `syntax/mathColor.ts`.
+ *
+ * `start` is where `text` sits in the document, which is what lets each line be
+ * placed against the blocks.
+ */
+function colorLines(text: string, hex: string, open: string, start: number, blocks: ProtectedBlock[]): string {
+	const lines = text.split("\n");
+	const offsets = lineOffsets(lines, start);
+	// only a math block whose opening line the selection actually reaches can be
+	// colored: the command goes right behind that `$$`, and there is nowhere to
+	// put it otherwise.
+	const lineStarts = new Set(offsets);
+
+	const out: string[] = [];
+
+	lines.forEach((line, i) => {
+		const from = offsets[i];
+		const block = blockAt(blocks, from, from + line.length);
+
+		if (block == undefined) {
+			out.push(line ? open + line + CLOSE_MARKER : line);
+			return;
+		}
+		if (block.kind == "code" || !lineStarts.has(block.from)) {
+			out.push(line); // not ours to touch, or no `$$` of its own in reach
+			return;
+		}
+		if (from == block.from) {
+			out.push(...openingLineWithColor(line, hex));
+			return;
+		}
+		// the color this block already carried is replaced, never stacked.
+		if (!isMathColorLine(line)) {
+			out.push(line);
+		}
+	});
+
+	return out.join("\n");
+}
+
+/** Where each of these lines starts, given where the first one does. */
+function lineOffsets(lines: string[], start: number): number[] {
+	const offsets: number[] = [];
+	let pos = start;
+
+	for (const line of lines) {
+		offsets.push(pos);
+		pos += line.length + 1; // the newline the split consumed
+	}
+
+	return offsets;
 }
 
 /**
@@ -99,7 +178,9 @@ function selectionsAfterInsert(colored: string, edits: Edit[], openLength: numbe
 		const start = edit.from + shift;
 
 		if (edit.from == edit.to) {
-			selections.push({ from: positionAt(colored, start + openLength) });
+			// a cursor that was served sits inside its new pair; one a protected
+			// block sent away has nothing to sit inside and stays put.
+			selections.push({ from: positionAt(colored, edit.insert == "" ? start : start + openLength) });
 		} else {
 			selections.push({
 				from: positionAt(colored, start),
@@ -118,11 +199,15 @@ function selectionsAfterInsert(colored: string, edits: Edit[], openLength: numbe
  * selection. The text itself stays.
  */
 export function removeColor(editor: Editor, view: EditorView): void {
-	const tree = view.state.field(textColorParserField).tree;
+	const { tree, blocks } = view.state.field(textColorParserField);
 	const sliceDoc = (from: number, to: number) => view.state.sliceDoc(from, to);
 	const changes: Edit[] = [];
 
 	for (const range of view.state.selection.ranges) {
+		// a math block wears its color as latex rather than as markup, so that
+		// is what has to come off it.
+		changes.push(...mathColorRemovals(view, blocks, range.from, range.to));
+
 		if (range.empty) {
 			// no selection: strip the expression the cursor is inside.
 			const expression = enclosingExpression(view.state, range.head);
@@ -153,6 +238,38 @@ export function removeColor(editor: Editor, view: EditorView): void {
 	if (changes.length > 0) {
 		view.dispatch({ changes: dedupe(changes) });
 	}
+}
+
+/**
+ * The changes that take the latex color back off every math block this range
+ * touches: the whole line when the command has one to itself, otherwise just
+ * the command and the space in front of it that put it there.
+ */
+function mathColorRemovals(view: EditorView, blocks: ProtectedBlock[], from: number, to: number): Edit[] {
+	const changes: Edit[] = [];
+
+	for (const block of blocks) {
+		if (block.kind != "math" || from > block.to || to < block.from) {
+			continue;
+		}
+
+		const last = view.state.doc.lineAt(block.to).number;
+		for (let n = view.state.doc.lineAt(block.from).number; n <= last; n++) {
+			const line = view.state.doc.line(n);
+			const found = mathColorIn(line.text);
+			if (found == null) {
+				continue;
+			}
+			// a line the command had to itself goes with it, break included, so
+			// no blank one is left behind; one shared with latex keeps the latex.
+			changes.push(isMathColorLine(line.text)
+				? { from: line.from, to: Math.min(line.to + 1, block.to), insert: '' }
+				: { from: line.from + found.index, to: line.from + found.index + found.length, insert: '' });
+			break;
+		}
+	}
+
+	return changes;
 }
 
 /** Strip the coloring of the expression at a document position. */

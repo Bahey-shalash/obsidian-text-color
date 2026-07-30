@@ -6,6 +6,7 @@ import { ColorWidget } from "src/editor/ColorWidget";
 import { settingsFacet } from "src/editor/SettingsFacet";
 import { colorStyle } from "src/color/ColorStyle";
 import { resolveTokenHex } from "src/color/resolveToken";
+import { textColorParserField } from "src/editor/TextColorStateField";
 import { shouldDescendInto } from "src/syntax";
 
 /** One open ~={token} while walking an expression, innermost last. */
@@ -38,9 +39,45 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 	const settings = state.facet(settingsFacet);
 	const sliceDoc = (from: number, to: number) => state.sliceDoc(from, to);
 
+	/**
+	 * The block this expression runs into, if any. Both kinds count: reading
+	 * mode skips a whole section that renders itself, so decorating inside one
+	 * here is how the two modes end up disagreeing about a `$$` block.
+	 *
+	 * Resolved once for the expression rather than per node — this runs on every
+	 * cursor move, once per visible expression, and the walk asks per node.
+	 */
+	const block = state.field(textColorParserField).blocks
+		.find(b => b.from < expression.to && b.to > expression.from);
+	const insideBlock = (range: { from: number, to: number }) =>
+		block != undefined && block.from <= range.from && range.to <= block.to;
+
+	/**
+	 * The part of a range that stays out of the block, or null when none of it
+	 * does. Clipped rather than skipped because the runs marked inside an
+	 * unbalanced code section are not nodes: one can start in ordinary text and
+	 * carry on straight through a fence, and only the tail of it is off limits.
+	 */
+	const outsideBlock = (range: { from: number, to: number }) => {
+		if (block == undefined || range.to <= block.from || range.from >= block.to) {
+			return range;
+		}
+		if (range.from < block.from) {
+			return { from: range.from, to: block.from };
+		}
+		return range.to > block.to ? { from: block.to, to: range.to } : null;
+	};
+
 	const innermost = () => frames[frames.length - 1];
 
-	const markText = (range: { from: number, to: number }) => {
+	const markText = (marked: { from: number, to: number }) => {
+		const range = outsideBlock(marked);
+		if (range == null) {
+			return; // a block renders itself; see `insideBlock`.
+		}
+		if (range.to <= range.from) {
+			return; // codemirror does not accept an empty mark.
+		}
 		const frame = innermost();
 		if (frame == undefined) {
 			return; // text outside any open color; nothing to apply.
@@ -49,14 +86,14 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 		if (hex == null) {
 			return; // unknown name or empty token: leave the text alone.
 		}
-		if (range.to <= range.from) {
-			return; // codemirror does not accept an empty mark.
-		}
 		builder.add(range.from, range.to,
 			Decoration.mark({ attributes: { style: colorStyle(hex, settings) } }));
 	};
 
 	const hideMarker = (node: SyntaxNodeRef) => {
+		if (insideBlock(node)) {
+			return; // markup inside a block is a sample, not a marker.
+		}
 		builder.add(node.from, node.to, Decoration.replace({ widget: new MarkerWidget(), block: false }));
 	};
 
@@ -88,6 +125,14 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 	};
 
 	walkSubtree(expression, (node: SyntaxNodeRef) => {
+		// nothing inside a block is ours to decorate. `markText` and
+		// `hideMarker` enforce that too, because the runs marked inside an
+		// unbalanced code section are not nodes and never reach this check;
+		// skipping the subtree here just saves walking it.
+		if (insideBlock(node)) {
+			return false;
+		}
+
 		// the backtick is as plain as the rest of an unbalanced section, so it
 		// stays inside the run; only the markers below end one.
 		if (node.type.name != "CODE") {

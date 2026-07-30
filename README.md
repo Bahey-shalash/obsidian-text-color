@@ -1,4 +1,4 @@
-# Text Color
+# Colors
 
 Color text in Obsidian with a hex-based markup syntax. The note stores a plain hex, so what renders is what is written: live preview, reading mode and PDF export all draw the same inline color.
 
@@ -43,7 +43,7 @@ The palette is a simple list of name → hex rows: recolor, rename, reorder, del
 
 ## Installation
 
-Not yet in the community plugin directory. Until then, install via [BRAT](https://github.com/TfTHacker/obsidian42-brat) with this repository's URL, or copy `main.js`, `manifest.json` and `styles.css` from the latest release into `.obsidian/plugins/text-color/`.
+Not yet in the community plugin directory. Until then, install via [BRAT](https://github.com/TfTHacker/obsidian42-brat) with this repository's URL, or copy `main.js`, `manifest.json` and `styles.css` from the latest release into `.obsidian/plugins/colors/`.
 
 ## About this fork
 

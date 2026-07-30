@@ -1,8 +1,12 @@
 /**
- * Matches a literal color written directly in the markup instead of a name.
- * Supported: #rgb, #rgba, #rrggbb, #rrggbbaa (case insensitive).
+ * A literal color written directly in the markup instead of a name, unanchored
+ * so it can be embedded in a larger pattern. Supported: #rgb, #rgba, #rrggbb,
+ * #rrggbbaa (case insensitive).
  */
-export const HEX_COLOR = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+export const HEX_SOURCE = "#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})";
+
+/** Matches a literal color, and nothing else. */
+export const HEX_COLOR = new RegExp(`^${HEX_SOURCE}$`);
 
 /** Is this markup token a literal color rather than a name? */
 export function isLiteralColor(token: string): boolean {

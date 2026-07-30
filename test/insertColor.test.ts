@@ -118,3 +118,54 @@ describe("insertColor as one step", () => {
 		]);
 	});
 });
+
+/**
+ * Blocks that render themselves.
+ *
+ * A code fence belongs to obsidian's highlighter and is passed straight
+ * through. A math block cannot take the markup at all — a marker in front of
+ * its `$$` and reading mode stops seeing math — so it is colored in latex,
+ * which both renderers hand to the same engine.
+ */
+describe("insertColor around blocks", () => {
+	function colored(doc: string, hex = HEX): string {
+		const editor = FakeEditor.withSelections(doc, [[0, doc.length]]);
+		insertColor(hex, editor.asEditor());
+		return editor.text;
+	}
+
+	test("a math block is colored in latex, not in markup", () => {
+		expect(colored("$$\nA^{T}A\n$$")).toBe(`$$\n\\color{${HEX}}\nA^{T}A\n$$`);
+	});
+
+	test("a $$ sharing its line takes the command inline, ahead of the latex", () => {
+		expect(colored("$$ A^{T}A\n= B $$")).toBe(`$$ \\color{${HEX}} A^{T}A\n= B $$`);
+	});
+
+	test("recoloring replaces the command instead of stacking another", () => {
+		const once = colored("$$\nA^{T}A\n$$");
+		expect(colored(once, "#44cf6e")).toBe("$$\n\\color{#44cf6e}\nA^{T}A\n$$");
+	});
+
+	test("a fenced code block is passed through untouched", () => {
+		expect(colored("```c\nint x = 1;\n```")).toBe("```c\nint x = 1;\n```");
+	});
+
+	test("prose on either side is still colored", () => {
+		expect(colored("before\n```c\nint x;\n```\nafter"))
+			.toBe(`${OPEN}before=~\n\`\`\`c\nint x;\n\`\`\`\n${OPEN}after=~`);
+	});
+
+	test("a cursor inside a block writes nothing and stays where it is", () => {
+		const doc = "```c\nint x;\n```";
+		const at = doc.indexOf("int");
+		const editor = FakeEditor.withCursorsAt(doc, [at]);
+		insertColor(HEX, editor.asEditor());
+		expect(editor.text).toBe(doc);
+		expect(editor.cursorOffsets).toEqual([at]);
+	});
+
+	test("inline math and inline code still take ordinary markup", () => {
+		expect(colored("a $x^2$ and `code`")).toBe(`${OPEN}a $x^2$ and \`code\`=~`);
+	});
+});

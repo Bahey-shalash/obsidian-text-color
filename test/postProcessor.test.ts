@@ -17,6 +17,47 @@ function render(html: string): HTMLElement {
 	return el;
 }
 
+/**
+ * Sections obsidian renders itself.
+ *
+ * This processor runs before the section reaches mathjax or the code
+ * highlighter, so the dom holds no `<pre>` or `<code>` to recognise one by —
+ * only the source says what it is. A span written into a math block becomes
+ * part of the latex mathjax is handed, which it renders as a parse error: the
+ * whole block comes back as the serialized `<span style="...">` as text.
+ */
+describe("blocks that render themselves", () => {
+	function renderSection(html: string, source: string): HTMLElement {
+		const el = block(html);
+		const context = {
+			frontmatter: null,
+			getSectionInfo: () => ({ text: source, lineStart: 0, lineEnd: source.split("\n").length - 1 }),
+		} as unknown as MarkdownPostProcessorContext;
+		textColorPostProcessor(el, context, settings);
+		return el;
+	}
+
+	test("a math block is left exactly as it was", () => {
+		const source = "$$\n~={red}A^{T}A=~\n$$";
+		const el = renderSection(`<p>${source}</p>`, source);
+		expect(el.querySelector("span")).toBeNull();
+		expect(el.textContent).toBe(source);
+	});
+
+	test("a fenced code block is left exactly as it was", () => {
+		const source = "```c\n~={red}int main(){}=~\n```";
+		const el = renderSection(`<p>${source}</p>`, source);
+		expect(el.querySelector("span")).toBeNull();
+		expect(el.textContent).toBe(source);
+	});
+
+	test("an ordinary paragraph is still colored", () => {
+		const source = "~={red}hello=~";
+		const el = renderSection(`<p>${source}</p>`, source);
+		expect(spanWith(el, "#e93147")?.textContent).toBe("hello");
+	});
+});
+
 /** the span carrying this hex, wherever it is */
 function spanWith(el: HTMLElement, hex: string): HTMLElement | null {
 	return Array.from(el.querySelectorAll("span")).find(s =>
@@ -163,5 +204,52 @@ describe("token edge cases", () => {
 		const el = render("<p>~={mystery}text=~</p>");
 		expect(el.textContent).toBe("text");
 		expect(el.querySelector("span")?.getAttribute("style")).toBeNull();
+	});
+});
+
+/**
+ * A closing marker whose opener is in an earlier section.
+ *
+ * This is the shape a color wrapping a code block always takes: the opener,
+ * the fence and the closer are three separate sections. Live preview parses
+ * the whole document and hides both markers; reading mode sees the closer on
+ * its own and used to leave it on screen as stray text.
+ */
+describe("a closing marker inherited from an earlier section", () => {
+	const source = "~={red}\n```\nhello\n```\n=~";
+
+	function renderClosingSection(html: string, text: string, lineStart: number): HTMLElement {
+		const el = block(html);
+		const context = {
+			frontmatter: null,
+			getSectionInfo: () => ({ text, lineStart, lineEnd: lineStart }),
+		} as unknown as MarkdownPostProcessorContext;
+		textColorPostProcessor(el, context, settings);
+		return el;
+	}
+
+	test("the marker is taken off instead of shown", () => {
+		const el = renderClosingSection("<p>=~</p>", source, 4);
+		expect(el.textContent).toBe("");
+	});
+
+	test("a stray closer with no opener above it is still plain text", () => {
+		const el = renderClosingSection("<p>=~</p>", "just prose\n\n=~", 2);
+		expect(el.textContent).toBe("=~");
+	});
+
+	test("a closer whose opener was already closed is still plain text", () => {
+		const el = renderClosingSection("<p>=~</p>", "~={red}done=~\n\n=~", 2);
+		expect(el.textContent).toBe("=~");
+	});
+
+	test("an opener inside a code block does not count", () => {
+		const el = renderClosingSection("<p>=~</p>", "```\n~={red}\n```\n=~", 3);
+		expect(el.textContent).toBe("=~");
+	});
+
+	test("a blank line ends the reach, as it does in the grammar", () => {
+		const el = renderClosingSection("<p>=~</p>", "~={red}open\n\nprose\n\n=~", 4);
+		expect(el.textContent).toBe("=~");
 	});
 });

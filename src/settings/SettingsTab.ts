@@ -55,7 +55,7 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 
 	hide(): void {
 		this.flushPendingNames()
-			.catch(e => console.error(`text-color: could not save the palette: ${e}`));
+			.catch(e => console.error(`colors: could not save the palette: ${e}`));
 		super.hide();
 	}
 
@@ -140,7 +140,7 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 				return;
 			}
 			this.replaceColor(index, { ...current, name: value })
-				.catch(e => console.error(`text-color: could not save the palette: ${e}`));
+				.catch(e => console.error(`colors: could not save the palette: ${e}`));
 		}, RENAME_DELAY, true);
 
 		const name = new TextComponent(row);

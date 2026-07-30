@@ -1,6 +1,6 @@
 import { MarkdownPostProcessorContext } from 'obsidian';
 import { FastTextColorPluginSettings } from 'src/settings/settings';
-import { OPEN, CLOSE, OPEN_START, firstMatch, tokenOf, isCodeElement, SyntaxMatch } from 'src/syntax';
+import { OPEN, CLOSE, OPEN_START, CLOSE_MARKER, firstMatch, tokenOf, isCodeElement, isSelfRenderingSource, colorOpenBefore, SyntaxMatch } from 'src/syntax';
 import { applyColorStyle } from 'src/color/ColorStyle';
 import { resolveTokenHex } from 'src/color/resolveToken';
 
@@ -13,21 +13,93 @@ import { resolveTokenHex } from 'src/color/resolveToken';
  * pops it, and everything rendered between the two is moved inside the span.
  */
 export const textColorPostProcessor = (el: HTMLElement, context: MarkdownPostProcessorContext, settings: FastTextColorPluginSettings): void => {
-	// cheap guard: no opening marker anywhere means nothing to do. textContent
-	// costs a walk, innerHTML would cost a full serialization of the block.
-	if (!(el.textContent ?? "").includes(OPEN_START)) {
+	const text = el.textContent ?? "";
+	const opens = text.includes(OPEN_START);
+
+	// cheap guard: no marker to act on means nothing to do. textContent costs a
+	// walk, innerHTML would cost a full serialization of the block.
+	if (!opens && !text.includes(CLOSE_MARKER)) {
+		return;
+	}
+
+	// where this section's markdown sits in the note. Fetched once: both
+	// questions below are about the source, and it is the whole file.
+	const section = sourceRangeOf(el, context);
+
+	// a section obsidian renders itself is not ours to walk. `isCodeElement`
+	// cannot see one yet: this runs before the section reaches mathjax or the
+	// code highlighter, so there is no `<pre>` or `<code>` in the dom to
+	// recognise — the source has to be asked instead. Spans written into one
+	// come back as the block's own input: mathjax renders them as a parse
+	// error and the highlighter as literal text, either way taking the block
+	// down with them.
+	if (section != null && isSelfRenderingSource(section.source.slice(section.from, section.to))) {
+		return;
+	}
+
+	// a closing marker whose opener is in an earlier section still belongs to
+	// that opener. Live preview parses the whole document and hides it; without
+	// this, reading mode has no opener to match and leaves it on screen — the
+	// shape a color wrapping a code block always takes.
+	const inherited = !opens && section != null
+		&& colorOpenBefore(section.source, section.from);
+
+	if (!opens && !inherited) {
 		return;
 	}
 
 	const snapshot = el.cloneNode(true);
 
 	try {
-		colorNode(el, { settings, open: [], doc: el.ownerDocument });
+		colorNode(el, { settings, open: [], doc: el.ownerDocument, inherited });
 	} catch (e) {
-		console.error(`text-color: reading mode coloring failed, block left uncolored: ${e}`);
+		console.error(`colors: reading mode coloring failed, block left uncolored: ${e}`);
 		restoreChildren(el, snapshot);
 	}
 };
+
+/** The note this section was rendered from, and where in it the section sits. */
+interface SourceRange {
+	/** the whole note, which is what both questions about a section need */
+	source: string;
+	from: number;
+	to: number;
+}
+
+/**
+ * Locate this section in its note, in offsets.
+ *
+ * Answers null when there is no section info to go on — embeds and exports do
+ * not always carry it — which leaves the dom level `isCodeElement` guard as the
+ * only line of defence, exactly as before.
+ *
+ * Walks to the line rather than splitting: `info.text` is the entire note, and
+ * this runs once per rendered section, so splitting it here would cost a copy
+ * of the note per section.
+ */
+function sourceRangeOf(el: HTMLElement, context: MarkdownPostProcessorContext): SourceRange | null {
+	// guarded rather than called: the type says this is always there, but it is
+	// the host's promise, not ours, and answering null costs only the coloring
+	// of a section that spans blocks.
+	const info = context?.getSectionInfo?.(el);
+	if (info == null) {
+		return null;
+	}
+	const from = offsetOfLine(info.text, info.lineStart);
+	return { source: info.text, from, to: offsetOfLine(info.text, info.lineEnd + 1, from, info.lineStart) };
+}
+
+/** Where a line starts, counted from a line already known to start at `pos`. */
+function offsetOfLine(source: string, line: number, pos = 0, counted = 0): number {
+	for (let n = counted; n < line; n++) {
+		const next = source.indexOf("\n", pos);
+		if (next < 0) {
+			return source.length;
+		}
+		pos = next + 1;
+	}
+	return pos;
+}
 
 /**
  * One `~={token}` that has been opened and not yet closed.
@@ -55,6 +127,12 @@ interface RenderContext {
 	open: OpenColor[];
 	/** the block's own document, which may belong to a pop out window */
 	doc: Document;
+	/**
+	 * A color opened in an earlier section is still open here, so the first
+	 * closing marker with nothing of its own to close is markup rather than the
+	 * stray text it would otherwise be. Cleared once that marker is consumed.
+	 */
+	inherited: boolean;
 }
 
 const BLOCK_BOUNDARIES = new Set([
@@ -188,6 +266,16 @@ function openColor(textNode: Text, text: string, marker: SyntaxMatch, ctx: Rende
 function closeColor(textNode: Text, text: string, marker: SyntaxMatch, ctx: RenderContext): Text {
 	const closed = ctx.open.pop();
 	const rest = ctx.doc.createTextNode(text.slice(marker.end));
+
+	if (closed == undefined && ctx.inherited) {
+		// closes a color opened in an earlier section: markup, so it goes. The
+		// color itself does not reach across the block between them — only the
+		// marker does, and leaving it on screen is what live preview does not do.
+		ctx.inherited = false;
+		textNode.nodeValue = text.slice(0, marker.index);
+		textNode.parentNode?.insertAfter(rest, textNode);
+		return rest;
+	}
 
 	if (closed == undefined) {
 		// stray closing marker with no open color: keep it as plain text

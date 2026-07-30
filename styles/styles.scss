@@ -1,2 +1,5 @@
-@import 'ftc-settings';
-@import 'inline-color';
+// `@use`, not `@import`: dart sass deprecated `@import` and drops it in 3.0.
+// Both partials are plain rulesets with no variables, mixins or functions to
+// share, so there is no namespace to name here.
+@use 'ftc-settings';
+@use 'inline-color';

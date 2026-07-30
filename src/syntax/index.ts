@@ -7,4 +7,7 @@
  */
 export * from "src/syntax/markers";
 export * from "src/syntax/code";
+export * from "src/syntax/blocks";
+export * from "src/syntax/mathColor";
+export * from "src/syntax/openBefore";
 export { textColorLanguage } from "src/syntax/language";

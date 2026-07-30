@@ -132,7 +132,7 @@ export const autoHexify = EditorView.updateListener.of((update: ViewUpdate) => {
 			// undoing this step from immediately reapplying it.
 			update.view.dispatch({ changes: conversions });
 		} catch (e) {
-			console.error(`text-color: auto hexify failed: ${e}`);
+			console.error(`colors: auto hexify failed: ${e}`);
 		}
 	});
 });

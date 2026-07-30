@@ -35,7 +35,7 @@ export function buildTextColorDecorations(
 		} catch (e) {
 			// a malformed tree during heavy edits must never take down the
 			// whole decoration pass.
-			console.error(`text-color: could not decorate expression at ${node.from}: ${e}`);
+			console.error(`colors: could not decorate expression at ${node.from}: ${e}`);
 		}
 	};
 
