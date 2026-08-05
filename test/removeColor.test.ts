@@ -78,7 +78,7 @@ describe("removeColor", () => {
 /**
  * Markup inside a closed code span is a code sample. Live preview renders it
  * literally and the auto hexifier refuses to rewrite it, so the one command
- * that edits markup away must refuse too — otherwise documenting the syntax in
+ * that edits markup away must refuse too. Otherwise documenting the syntax in
  * a note is enough to have it silently rewritten.
  */
 describe("literal code is never edited", () => {

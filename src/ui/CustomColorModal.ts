@@ -4,8 +4,8 @@ import { applyColorStyle } from "src/color/ColorStyle";
 
 /**
  * Modal that lets the user pick an arbitrary hex color. A pure picker: what
- * happens with the picked color — insert new markup, replace an existing
- * token — is the caller's onPicked, so the command palette and the swatch
+ * happens with the picked color (insert new markup, replace an existing
+ * token) is the caller's onPicked, so the command palette and the swatch
  * menu share one modal instead of each half-owning it.
  */
 export class CustomColorModal extends Modal {
@@ -31,7 +31,7 @@ export class CustomColorModal extends Modal {
 		contentEl.addClass("ftc-custom-color-modal");
 		contentEl.createEl("h3", { text: "Custom color" });
 
-		this.preview = contentEl.createEl("div", { cls: "ftc-custom-color-preview" });
+		this.preview = contentEl.createDiv({ cls: "ftc-custom-color-preview" });
 		this.preview.setText(this.sampleText());
 
 		new Setting(contentEl)
@@ -43,7 +43,10 @@ export class CustomColorModal extends Modal {
 			})
 			.addText(text => {
 				this.text = text;
-				text.setPlaceholder("#ff0000")
+				// the field's value is the current hex, so the placeholder is
+				// only seen once the user clears it: it names the field rather
+				// than repeating the format they just deleted.
+				text.setPlaceholder("Hex color")
 					.setValue(this.hex)
 					.onChange(value => {
 						if (parseHex(value) != null) {

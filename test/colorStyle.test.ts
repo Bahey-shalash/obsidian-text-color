@@ -93,7 +93,7 @@ describe("resolveTokenHex", () => {
 	});
 
 	/**
-	 * Settings are normalized on load, so this cannot normally happen — but a
+	 * Settings are normalized on load, so this cannot normally happen, but a
 	 * value that is not a hex must never reach a style attribute, whatever
 	 * put it in the settings.
 	 */

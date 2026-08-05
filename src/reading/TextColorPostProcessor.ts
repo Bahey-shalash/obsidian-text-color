@@ -1,6 +1,6 @@
 import { MarkdownPostProcessorContext } from 'obsidian';
 import { FastTextColorPluginSettings } from 'src/settings/settings';
-import { OPEN, CLOSE, OPEN_START, CLOSE_MARKER, firstMatch, tokenOf, isCodeElement, isSelfRenderingSource, colorOpenBefore, SyntaxMatch } from 'src/syntax';
+import { OPEN, CLOSE, OPEN_START, CLOSE_MARKER, firstMatch, isCloseMarker, tokenOf, isCodeElement, isSelfRenderingSource, colorOpenBefore, SyntaxMatch } from 'src/syntax';
 import { applyColorStyle } from 'src/color/ColorStyle';
 import { resolveTokenHex } from 'src/color/resolveToken';
 
@@ -29,7 +29,7 @@ export const textColorPostProcessor = (el: HTMLElement, context: MarkdownPostPro
 	// a section obsidian renders itself is not ours to walk. `isCodeElement`
 	// cannot see one yet: this runs before the section reaches mathjax or the
 	// code highlighter, so there is no `<pre>` or `<code>` in the dom to
-	// recognise — the source has to be asked instead. Spans written into one
+	// recognise: the source has to be asked instead. Spans written into one
 	// come back as the block's own input: mathjax renders them as a parse
 	// error and the highlighter as literal text, either way taking the block
 	// down with them.
@@ -39,7 +39,7 @@ export const textColorPostProcessor = (el: HTMLElement, context: MarkdownPostPro
 
 	// a closing marker whose opener is in an earlier section still belongs to
 	// that opener. Live preview parses the whole document and hides it; without
-	// this, reading mode has no opener to match and leaves it on screen — the
+	// this, reading mode has no opener to match and leaves it on screen: the
 	// shape a color wrapping a code block always takes.
 	const inherited = !opens && section != null
 		&& colorOpenBefore(section.source, section.from);
@@ -51,9 +51,9 @@ export const textColorPostProcessor = (el: HTMLElement, context: MarkdownPostPro
 	const snapshot = el.cloneNode(true);
 
 	try {
-		colorNode(el, { settings, open: [], doc: el.ownerDocument, inherited });
+		colorNode(el, { settings, open: [], doc: el.ownerDocument, root: el, inherited });
 	} catch (e) {
-		console.error(`colors: reading mode coloring failed, block left uncolored: ${e}`);
+		console.error("colors: reading mode coloring failed, block left uncolored:", e);
 		restoreChildren(el, snapshot);
 	}
 };
@@ -69,8 +69,8 @@ interface SourceRange {
 /**
  * Locate this section in its note, in offsets.
  *
- * Answers null when there is no section info to go on — embeds and exports do
- * not always carry it — which leaves the dom level `isCodeElement` guard as the
+ * Answers null when there is no section info to go on (embeds and exports do
+ * not always carry it), which leaves the dom level `isCodeElement` guard as the
  * only line of defence, exactly as before.
  *
  * Walks to the line rather than splitting: `info.text` is the entire note, and
@@ -110,7 +110,7 @@ function offsetOfLine(source: string, line: number, pos = 0, counted = 0): numbe
  * b=~`), and a color cannot be one span across those levels without dragging
  * the text into an element it was never formatted by. So the color continues
  * as a fresh span at whatever level the next content lives at, and `span`
- * follows along — which also keeps the closing marker's remainder landing at
+ * follows along, which also keeps the closing marker's remainder landing at
  * the level the text came from.
  */
 interface OpenColor {
@@ -127,6 +127,8 @@ interface RenderContext {
 	open: OpenColor[];
 	/** the block's own document, which may belong to a pop out window */
 	doc: Document;
+	/** the block this pass was handed; nothing outside it is ours to touch */
+	root: Node;
 	/**
 	 * A color opened in an earlier section is still open here, so the first
 	 * closing marker with nothing of its own to close is markup rather than the
@@ -226,7 +228,7 @@ function colorTextNode(textNode: Text, ctx: RenderContext): void {
 	let rest: Text | null = textNode;
 	while (rest != null && rest.nodeValue) {
 		// closing the innermost color can leave the remainder outside a color
-		// that is still open — which the caller's walk would have handled for a
+		// that is still open, which the caller's walk would have handled for a
 		// child of its own, but this remainder is not one.
 		moveIntoOpenColor(rest, ctx);
 		rest = colorFirstMarker(rest, ctx);
@@ -238,14 +240,17 @@ function colorFirstMarker(textNode: Text, ctx: RenderContext): Text | null {
 	const text = textNode.nodeValue ?? "";
 	const open = firstMatch(text, OPEN);
 	const close = firstMatch(text, CLOSE);
+	// a `=~` that would take the `~` of the opener behind it is not a closer;
+	// see `isCloseMarker`. The opener wins the character they both want.
+	const closes = close != null && isCloseMarker(text, close.index);
 
-	if (open != null && (close == null || open.index < close.index)) {
+	if (open != null && (!closes || open.index < close.index)) {
 		return openColor(textNode, text, open, ctx);
 	}
-	if (close != null) {
+	if (closes) {
 		return closeColor(textNode, text, close, ctx);
 	}
-	return null;
+	return closeSplitMarker(textNode, text, ctx);
 }
 
 /** ~={token}: start a span; the text behind the marker moves inside it. */
@@ -269,7 +274,7 @@ function closeColor(textNode: Text, text: string, marker: SyntaxMatch, ctx: Rend
 
 	if (closed == undefined && ctx.inherited) {
 		// closes a color opened in an earlier section: markup, so it goes. The
-		// color itself does not reach across the block between them — only the
+		// color itself does not reach across the block between them: only the
 		// marker does, and leaving it on screen is what live preview does not do.
 		ctx.inherited = false;
 		textNode.nodeValue = text.slice(0, marker.index);
@@ -290,9 +295,99 @@ function closeColor(textNode: Text, text: string, marker: SyntaxMatch, ctx: Rend
 	return rest;
 }
 
+/**
+ * Close a color whose `=~` obsidian broke in half.
+ *
+ * Striking colored text through gives `~~~={red}text=~~~`: three tildes in a
+ * row, of which obsidian's strikethrough takes the first two. The `=` of the
+ * closing marker is left inside the `<del>` and its `~` behind it as a
+ * sibling, so neither half holds a marker any regex can find. Unhandled, the
+ * color never closes: it runs on to the end of the block with both orphaned
+ * characters on screen, which is the opposite of what live preview shows for
+ * the same line.
+ *
+ * So a trailing `=` whose next text begins with `~` is the marker, split, and
+ * both halves go the way a whole one would. The text behind them stays where
+ * obsidian put it: it is no longer inside the color.
+ *
+ * Only across the edge of a strikethrough, though. Nothing else in markdown
+ * can take that `~`, and without the restriction the rule reads `~={red}a=*~b*=~`
+ * (a `=` at the end of the colored text, italics that happen to start with a
+ * tilde) as a split marker, and eats a character the user typed.
+ */
+function closeSplitMarker(textNode: Text, text: string, ctx: RenderContext): null {
+	if (ctx.open.length == 0 || !text.endsWith(CLOSE_MARKER[0])) {
+		return null;
+	}
+	const next = textAfter(textNode, ctx.root);
+	const behind = next?.nodeValue ?? "";
+	if (next == null || !behind.startsWith(CLOSE_MARKER[1])) {
+		return null;
+	}
+	if (struckThrough(textNode, ctx.root) == struckThrough(next, ctx.root)) {
+		return null; // no `<del>` between the halves, so nothing split them.
+	}
+
+	textNode.nodeValue = text.slice(0, -CLOSE_MARKER[0].length);
+	next.nodeValue = behind.slice(CLOSE_MARKER[1].length);
+	ctx.open.pop();
+	return null;
+}
+
+/** The elements obsidian renders `~~text~~` as. */
+const STRIKETHROUGH = new Set(["DEL", "S"]);
+
+/** Whether a node sits inside a strikethrough within this block. */
+function struckThrough(node: Node, root: Node): boolean {
+	for (let up: Node | null = node; up != null && up != root; up = up.parentNode) {
+		if (STRIKETHROUGH.has(up.nodeName)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * The next text node in document order, without leaving the block.
+ *
+ * Bounded by the block this pass was handed as well as by the block elements
+ * inside it: the root is not always one of those, obsidian decides what a
+ * section is, and a walk that climbs past it is looking at somebody else's
+ * rendered section, which is not ours to read, let alone to edit.
+ */
+function textAfter(node: Node, root: Node): Text | null {
+	for (let up: Node | null = node; up != null && up != root && !isBlockBoundary(up); up = up.parentNode) {
+		for (let sibling = up.nextSibling; sibling != null; sibling = sibling.nextSibling) {
+			const text = firstTextIn(sibling);
+			if (text != null) {
+				return text;
+			}
+		}
+	}
+	return null;
+}
+
+/** The first non empty text inside a node, itself included. */
+function firstTextIn(node: Node): Text | null {
+	if (node.nodeType == Node.TEXT_NODE) {
+		return node.nodeValue ? node as Text : null;
+	}
+	if (isBlockBoundary(node) || isCodeElement(node)) {
+		return null;
+	}
+	for (let child = node.firstChild; child != null; child = child.nextSibling) {
+		const text = firstTextIn(child);
+		if (text != null) {
+			return text;
+		}
+	}
+	return null;
+}
+
 function newSpan(ctx: RenderContext, hex: string | null): HTMLElement {
-	// createElement, not createEl; see MarkerWidget.toDOM for why.
-	const span = ctx.doc.createElement("span");
+	// the window's createSpan, not the node or the global one; see
+	// MarkerWidget.toDOM for why.
+	const span = ctx.doc.win.createSpan();
 	if (hex != null) {
 		applyColorStyle(span, hex, ctx.settings);
 	}

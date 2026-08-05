@@ -34,6 +34,28 @@ export function setupDom(): void {
 		this.insertBefore(node, ref.nextSibling);
 		return node;
 	};
+	// the renderer builds its spans through the window of the document it is
+	// rendering into, the way it does in a pop out; jsdom has neither the `win`
+	// back reference nor the helper on it. Obsidian resolves both the same way
+	// it does (a document owns no document, so it stands in for its own) and
+	// falls back to the main window rather than throwing.
+	Object.defineProperty(dom.window.Node.prototype, "win", {
+		configurable: true,
+		get(this: Node) {
+			const doc = (this.ownerDocument ?? this) as Document;
+			return doc.defaultView ?? dom.window;
+		},
+	});
+	(dom.window as any).createSpan = function (o?: { cls?: string, text?: string }) {
+		const el = dom.window.document.createElement("span");
+		if (o?.cls != undefined) {
+			el.className = o.cls;
+		}
+		if (o?.text != undefined) {
+			el.textContent = o.text;
+		}
+		return el;
+	};
 }
 
 /** A fresh detached block element to render into. */

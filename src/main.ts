@@ -41,7 +41,9 @@ export default class FastTextColorPlugin extends Plugin {
 	 */
 	private editorSettings: Extension[] = [];
 
-	async onload() {
+	// obsidian awaits this before it counts the plugin as loaded, which is what
+	// lets the settings be read before anything below is registered.
+	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.lastUsedHex = this.settings.palette[0]?.hex ?? "#ff0000";
 
@@ -135,7 +137,7 @@ export default class FastTextColorPlugin extends Plugin {
 					});
 
 					submenu.addItem((subitem) => {
-						subitem.setTitle("remove")
+						subitem.setTitle("Remove")
 							.setIcon("ban")
 							.onClick(() => {
 								const editorView = editorViewOf(view);
@@ -176,27 +178,44 @@ export default class FastTextColorPlugin extends Plugin {
 
 	async loadSettings() {
 		const raw: unknown = await this.loadData();
-		const { settings, dropped } = migrateSettings(raw ?? DEFAULT_SETTINGS);
+		const { settings, dropped, renamed } = migrateSettings(raw ?? DEFAULT_SETTINGS);
 		this.settings = settings;
 
 		if (dropped.length > 0) {
 			console.warn(`colors: dropped ${dropped.length} setting(s) whose value is not a color: ${dropped.join(", ")}`);
 		}
+		if (renamed.length > 0) {
+			console.warn(`colors: renamed ${renamed.length} duplicate palette name(s), which are unreachable while they share one: ${renamed.join(", ")}`);
+		}
 
 		const stored = raw as { version?: string, legacy?: unknown } | null;
-		if (stored?.version !== SETTINGS_VERSION || stored?.legacy != undefined || dropped.length > 0) {
+		if (stored?.version !== SETTINGS_VERSION || stored?.legacy != undefined || dropped.length > 0 || renamed.length > 0) {
 			await this.saveData(this.settings);
 		}
 	}
+
+	/** The write in flight, if there is one; see `updateSettings`. */
+	private saving: Promise<void> = Promise.resolve();
 
 	/**
 	 * The only way settings change. A new object replaces the old one, which
 	 * is what makes the change visible to every editor: the facet compares by
 	 * identity, so an in place edit would be invisible to it.
+	 *
+	 * The writes are chained, because nothing else orders them. A change made
+	 * while the one before it is still being written (holding alt+down on a
+	 * palette row is enough) would otherwise put two whole settings objects in
+	 * flight at once, and the older one landing last would take the newer one
+	 * off disk while it is still on screen. Each link writes `this.settings` as
+	 * it stands when its turn comes, so a queued write is never a stale one.
 	 */
 	async updateSettings(update: Partial<FastTextColorPluginSettings>): Promise<void> {
 		this.settings = { ...this.settings, ...update };
-		await this.saveData(this.settings);
+		// the failure of an earlier write is that caller's to report; swallowed
+		// here only so a rejection cannot poison every write that follows.
+		const write = this.saving.catch(() => undefined).then(() => this.saveData(this.settings));
+		this.saving = write;
+		await write;
 		this.refreshViews();
 	}
 
@@ -221,8 +240,17 @@ export default class FastTextColorPlugin extends Plugin {
 	}
 }
 
-/** The underlying CodeMirror view of a markdown view; not in the public api. */
+/**
+ * The underlying CodeMirror view of a markdown view; not in the public api.
+ *
+ * `cm` is read as an unknown and then checked, rather than asserted into an
+ * `EditorView`: an editor that does not carry one (a version that renames the
+ * field, a view that is not a codemirror editor at all) then reads as "no
+ * view" instead of as a view that throws on first use. The check holds because
+ * `@codemirror/view` is external to the bundle, so this is obsidian's own class
+ * and not a second copy of it.
+ */
 function editorViewOf(view: MarkdownView | { editor?: Editor } | null): EditorView | null {
-	const editor = view?.editor as (Editor & { cm?: EditorView }) | undefined;
-	return editor?.cm ?? null;
+	const cm = (view?.editor as { cm?: unknown } | undefined)?.cm;
+	return cm instanceof EditorView ? cm : null;
 }

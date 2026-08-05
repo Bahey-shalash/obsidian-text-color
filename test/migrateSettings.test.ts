@@ -2,7 +2,7 @@ import { migrateSettings, DEFAULT_SETTINGS, SETTINGS_VERSION } from "src/setting
 
 /**
  * The plugin has its own id and therefore its own data folder, so there is
- * no old-version data to migrate — loading is a sanitizer. Whatever is on
+ * no old-version data to migrate: loading is a sanitizer. Whatever is on
  * disk, what comes out is the current shape, every stored hex is canonical,
  * and anything that is not a color is dropped and reported, never stored.
  */
@@ -38,6 +38,30 @@ describe("migrateSettings", () => {
 		const { settings, dropped } = migrateSettings(raw);
 		expect(settings.palette).toEqual([{ name: "ok", hex: "#abcdef" }]);
 		expect(dropped).toEqual(["sneaky"]);
+	});
+
+	/**
+	 * A name is how the menus and the settings tab tell two colors apart, and
+	 * resolving one takes the first match; a second entry under the same name
+	 * is a color nothing can reach. Renamed rather than dropped, so the color
+	 * itself survives.
+	 */
+	test("a duplicate palette name is renamed, and the color kept", () => {
+		const raw = {
+			version: SETTINGS_VERSION,
+			palette: [
+				{ name: "red", hex: "#ff0000" },
+				{ name: "red", hex: "#aa0000" },
+				{ name: "color-2", hex: "#00ff00" },
+			],
+		};
+		const { settings, renamed } = migrateSettings(raw);
+		expect(settings.palette).toEqual([
+			{ name: "red", hex: "#ff0000" },
+			{ name: "color-2", hex: "#aa0000" },
+			{ name: "color-3", hex: "#00ff00" },
+		]);
+		expect(renamed).toEqual(["red -> color-2", "color-2 -> color-3"]);
 	});
 
 	test("a retired legacy map is ignored, not carried along", () => {

@@ -1,5 +1,5 @@
 import type FastTextColorPlugin from "src/main";
-import { App, ColorComponent, Debouncer, ExtraButtonComponent, PluginSettingTab, Setting, TextComponent, debounce } from "obsidian";
+import { App, Debouncer, PluginSettingTab, Setting, SettingDefinitionItem, TextComponent, debounce } from "obsidian";
 import { applyColorStyle } from "src/color/ColorStyle";
 import { normalizeHex } from "src/color/InlineColor";
 import { PaletteColor, nextFreeName } from "src/settings/settings";
@@ -20,8 +20,42 @@ interface PendingName {
 }
 
 /**
+ * The plain on/off settings, by the key the declarative control binds under,
+ * which is also the key they are stored under, so `getControlValue` and
+ * `setControlValue` below are a lookup rather than a mapping.
+ */
+const TOGGLES = {
+	interactiveDelimiters: {
+		name: "Interactive delimiters",
+		desc: "Show a color swatch in front of the color token inside the editor.",
+	},
+	colorCodeSection: {
+		name: "Color inline code",
+		desc: "Apply color to inline code.",
+	},
+} as const;
+
+type ToggleKey = keyof typeof TOGGLES;
+
+/**
+ * `in` would answer yes to `toString` and everything else off the prototype,
+ * and a key that is not one of these must not read or write one of them.
+ */
+function isToggleKey(key: string): key is ToggleKey {
+	return Object.prototype.hasOwnProperty.call(TOGGLES, key);
+}
+
+/**
  * The palette: menu name <-> hex, one row per color. The name is only a label
  * for the menus; notes always receive the hex.
+ *
+ * Declared rather than drawn: `getSettingDefinitions` hands obsidian the shape
+ * of the tab and obsidian renders it, which is what puts these settings in the
+ * settings search. The palette is a `list`, so the add, delete and reorder
+ * affordances (buttons, drag handles, the keyboard shortcuts for them) come
+ * from obsidian; this file only says what each of them does to the palette.
+ * The rows themselves are still built by hand, because a row is two controls
+ * (the color and the name that stands for it) and a declared row is one.
  *
  * Every handler produces a new settings object rather than editing the one it
  * was given. That is what lets open editors notice the change: the facet
@@ -55,83 +89,92 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 
 	hide(): void {
 		this.flushPendingNames()
-			.catch(e => console.error(`colors: could not save the palette: ${e}`));
+			.catch(e => console.error("colors: could not save the palette:", e));
 		super.hide();
 	}
 
-	display(): void {
-		const { containerEl } = this;
-		const { settings } = this.plugin;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName("Palette")
-			.setDesc("A name for the menus and the hex it stands for. Notes always get the hex.")
-			.setHeading();
-
-		const paletteEl = containerEl.createDiv();
-		paletteEl.addClass("ftc-palette");
-
-		settings.palette.forEach((color, index) => {
-			this.createPaletteRow(paletteEl, color, index);
-		});
-
-		new Setting(containerEl)
-			.setName("Add color")
-			.addButton(btn => {
-				btn.setIcon("plus")
-					.setTooltip("add a color to the palette")
-					.onClick(async () => {
-						// the palette at click time, not the snapshot this tab
-						// was rendered from: a rename keeps focus and does not
-						// redraw, so it lives only in the pending set.
-						const palette = this.takePendingNames();
-						await this.updatePalette([...palette, { name: nextFreeName(palette), hex: "#ffffff" }]);
-						this.display();
-					});
-			});
-
-		new Setting(containerEl).setName("Other").setHeading();
-
-		new Setting(containerEl)
-			.setName("Interactive delimiters")
-			.setDesc("Show a color swatch in front of the color token inside the editor.")
-			.addToggle(tgl => {
-				tgl.setValue(settings.interactiveDelimiters)
-					.onChange(value => this.plugin.updateSettings({ interactiveDelimiters: value }));
-			});
-
-		new Setting(containerEl)
-			.setName("Color inline code")
-			.setDesc("Apply color to inline code.")
-			.addToggle(tgl => {
-				tgl.setValue(settings.colorCodeSection)
-					.onChange(value => this.plugin.updateSettings({ colorCodeSection: value }));
-			});
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [
+			{
+				type: "list",
+				heading: "Palette",
+				emptyState: "No colors yet. The color menus stay empty until you add one.",
+				addItem: {
+					name: "Add a color to the palette",
+					action: () => { void this.addColor(); },
+				},
+				onDelete: index => { void this.deleteColor(index); },
+				onReorder: (from, to) => { this.moveColor(from, to); },
+				items: this.plugin.settings.palette.map((color, index) => ({
+					// what the settings search matches a row on. The row shows
+					// the name in the field that renames it, so `render` clears
+					// the label rather than printing it twice.
+					name: color.name,
+					aliases: [color.hex],
+					render: (setting: Setting) => this.renderPaletteRow(setting, color, index),
+				})),
+			},
+			{
+				type: "group",
+				heading: "Other",
+				items: Object.entries(TOGGLES).map(([key, { name, desc }]) => ({
+					name,
+					desc,
+					control: { type: "toggle" as const, key },
+				})),
+			},
+		];
 	}
 
-	/** One palette row: swatch, name, order, delete. */
-	private createPaletteRow(container: HTMLElement, color: PaletteColor, index: number): void {
-		const row = container.createDiv({ cls: "ftc-palette-row" });
+	/** Where the declared toggles above read from. */
+	getControlValue(key: string): unknown {
+		return isToggleKey(key) ? this.plugin.settings[key] : undefined;
+	}
 
-		new ColorComponent(row)
-			.setValue(color.hex)
-			.onChange(async value => {
-				// the entry at click time, not the snapshot this row was drawn
-				// from: a rename keeps focus and does not redraw, so spreading
-				// the snapshot here would write the old name back. Bail out
-				// before taking the pending renames, so a row that is already
-				// gone does not swallow them.
-				const current = this.entryAt(index);
-				if (current == undefined) {
-					return;
-				}
-				const palette = this.takePendingNames();
-				palette[index] = { ...palette[index], hex: normalizeHex(value, current.hex) };
-				await this.updatePalette(palette);
-				this.display();
-			});
+	/**
+	 * Where they write to: `updateSettings`, and not `saveData`, because that
+	 * is the path the open editors and previews are told about.
+	 */
+	setControlValue(key: string, value: unknown): void | Promise<void> {
+		if (typeof value != "boolean") {
+			return;
+		}
+		// spelled out rather than written through the key: a key that names no
+		// setting has to write nothing, not fall through to whichever one an
+		// else would have picked.
+		switch (key) {
+			case "interactiveDelimiters":
+				return this.plugin.updateSettings({ interactiveDelimiters: value });
+			case "colorCodeSection":
+				return this.plugin.updateSettings({ colorCodeSection: value });
+			default:
+				return;
+		}
+	}
+
+	/** One palette row: the color, and the name that stands for it. */
+	private renderPaletteRow(setting: Setting, color: PaletteColor, index: number): void {
+		setting.setName("");
+		setting.settingEl.addClass("ftc-palette-row");
+
+		setting.addColorPicker(picker => {
+			picker.setValue(color.hex)
+				.onChange(async value => {
+					// the entry at click time, not the snapshot this row was drawn
+					// from: a rename keeps focus and does not redraw, so spreading
+					// the snapshot here would write the old name back. Bail out
+					// before taking the pending renames, so a row that is already
+					// gone does not swallow them.
+					const current = this.entryAt(index);
+					if (current == undefined) {
+						return;
+					}
+					const palette = this.takePendingNames();
+					palette[index] = { ...palette[index], hex: normalizeHex(value, current.hex) };
+					await this.updatePalette(palette);
+					this.update();
+				});
+		});
 
 		const commitName: Debouncer<[string], void> = debounce((value: string) => {
 			this.pendingNames.delete(index);
@@ -140,12 +183,17 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 				return;
 			}
 			this.replaceColor(index, { ...current, name: value })
-				.catch(e => console.error(`colors: could not save the palette: ${e}`));
+				.catch(e => console.error("colors: could not save the palette:", e));
 		}, RENAME_DELAY, true);
 
-		const name = new TextComponent(row);
+		setting.addText(text => {
+			this.bindNameField(text, color, index, commitName);
+		});
+	}
+
+	private bindNameField(name: TextComponent, color: PaletteColor, index: number, commitName: Debouncer<[string], void>): void {
 		name.setValue(color.name)
-			.setPlaceholder("name")
+			.setPlaceholder("Name")
 			.onChange(value => {
 				const taken = this.effectiveNames().some((n, i) => i !== index && n === value);
 				if (!validateColorName(value) || taken) {
@@ -162,35 +210,61 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 				commitName(value);
 			});
 		name.inputEl.addClass("ftc-palette-name");
+		// the row carries no label, the name is shown in the field that edits
+		// it, so the field has to say what it is on its own.
+		name.inputEl.setAttr("aria-label", "Color name");
 		// the name shows itself in its color.
 		applyColorStyle(name.inputEl, color.hex);
+	}
 
-		new ExtraButtonComponent(row)
-			.setIcon("chevron-up")
-			.setTooltip("move up")
-			.onClick(() => this.moveColor(index, -1));
+	private async addColor(): Promise<void> {
+		// the palette at click time, not the snapshot the rows were built from:
+		// a rename keeps focus and does not redraw, so it lives only in the
+		// pending set.
+		const palette = this.takePendingNames();
+		await this.updatePalette([...palette, { name: nextFreeName(palette), hex: "#ffffff" }]);
+		this.update();
+	}
 
-		new ExtraButtonComponent(row)
-			.setIcon("chevron-down")
-			.setTooltip("move down")
-			.onClick(() => this.moveColor(index, 1));
+	/**
+	 * The rows hold their index, so every structural change ends in `update()`
+	 *, including the one the user calls off, because obsidian has already
+	 * offered the deletion by the time this runs.
+	 */
+	private async deleteColor(index: number): Promise<void> {
+		// awaited, not folded into the delete below: the confirmation sits
+		// between the two, and a rename the user then decides not to delete has
+		// to survive saying no.
+		await this.flushPendingNames();
+		const color = this.entryAt(index);
+		if (color != undefined && await confirmByModal(this.app,
+			`"${color.name}" disappears from the menus. Hexes already in your notes keep rendering.`,
+			`Delete color ${color.name}`)) {
+			await this.updatePalette(this.plugin.settings.palette.filter((_, i) => i !== index));
+		}
+		this.update();
+	}
 
-		new ExtraButtonComponent(row)
-			.setIcon("trash")
-			.setTooltip("delete color")
-			.onClick(async () => {
-				// awaited, not folded into the delete below: the confirmation
-				// sits between the two, and a rename the user then decides not
-				// to delete has to survive saying no.
-				await this.flushPendingNames();
-				const name = this.entryAt(index)?.name ?? color.name;
-				if (await confirmByModal(this.app,
-					`"${name}" disappears from the menus. Hexes already in your notes keep rendering.`,
-					`Delete color ${name}`)) {
-					await this.updatePalette(this.plugin.settings.palette.filter((_, i) => i !== index));
-					this.display();
-				}
-			});
+	/**
+	 * Redrawn before the write lands, unlike the other two: obsidian moves the
+	 * keyboard focus to the row at the destination index the moment this
+	 * returns, and if the rows have not moved yet that is the row that was
+	 * pushed aside, so the next alt+arrow would carry off the wrong color.
+	 * `updateSettings` swaps the settings object before it awaits anything, so
+	 * the redraw below already reads the new order.
+	 */
+	private moveColor(from: number, to: number): void {
+		// the bounds first, so a move that goes nowhere does not take the
+		// pending renames with it and drop them unwritten.
+		const palette = this.plugin.settings.palette;
+		if (from == to || from < 0 || to < 0 || from >= palette.length || to >= palette.length) {
+			return;
+		}
+		const moved = this.takePendingNames();
+		moved.splice(to, 0, ...moved.splice(from, 1));
+		this.updatePalette(moved)
+			.catch(e => console.error("colors: could not save the palette:", e));
+		this.update();
 	}
 
 	/**
@@ -199,7 +273,7 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 	 * make anyway.
 	 *
 	 * Letting the renames save themselves instead would put two snapshots of
-	 * data.json in flight at once — theirs and the caller's — and nothing
+	 * data.json in flight at once, theirs and the caller's, and nothing
 	 * orders the two writes, so the older one can land last and take the
 	 * caller's change off disk while it is still on screen.
 	 */
@@ -227,7 +301,7 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 	 * check has to see those: two rows renamed to the same thing inside one
 	 * debounce window would both pass a check against the saved palette, and a
 	 * duplicate leaves the second color unreachable, because resolving a name
-	 * takes the first match — the markup would silently get the other hex.
+	 * takes the first match: the markup would silently get the other hex.
 	 */
 	private effectiveNames(): string[] {
 		return this.plugin.settings.palette.map((c, i) => this.pendingNames.get(i)?.value ?? c.name);
@@ -240,19 +314,6 @@ export class FastTextColorPluginSettingTab extends PluginSettingTab {
 
 	private replaceColor(index: number, replacement: PaletteColor): Promise<void> {
 		return this.updatePalette(this.plugin.settings.palette.map((c, i) => i === index ? replacement : c));
-	}
-
-	private async moveColor(index: number, direction: number): Promise<void> {
-		// the bounds first, so a move that goes nowhere does not take the
-		// pending renames with it and drop them unwritten.
-		const target = index + direction;
-		if (target < 0 || target >= this.plugin.settings.palette.length) {
-			return;
-		}
-		const palette = this.takePendingNames();
-		[palette[index], palette[target]] = [palette[target], palette[index]];
-		await this.updatePalette(palette);
-		this.display();
 	}
 
 	private updatePalette(palette: PaletteColor[]): Promise<void> {

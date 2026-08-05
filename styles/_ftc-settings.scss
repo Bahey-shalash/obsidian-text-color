@@ -1,30 +1,19 @@
 /* SETTINGS */
 
-.ftc-palette {
-	display: flex;
-	flex-direction: column;
-	gap: var(--size-4-1);
-	padding: var(--size-4-2) 0;
-}
-
+/*
+ * A palette row. Obsidian lays the row out, drags it and deletes it; what is
+ * left here is the name field, and the empty label the row would otherwise
+ * hold: the name is shown in the field that edits it, so the row declares its
+ * name for the settings search and renders none.
+ */
 .ftc-palette-row {
-	display: flex;
-	align-items: center;
-	gap: var(--size-4-2);
-	padding: var(--size-4-1) var(--size-4-2);
-	border-radius: var(--radius-m);
-
-	&:hover {
-		background-color: var(--background-primary-alt);
+	.setting-item-info {
+		display: none;
 	}
 
 	.ftc-palette-name {
 		flex: 1 1 auto;
 		font-weight: var(--font-medium);
-	}
-
-	.extra-setting-button {
-		color: var(--text-muted);
 	}
 }
 

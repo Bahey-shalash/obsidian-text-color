@@ -8,7 +8,7 @@ import { isLiteralCodeNode } from "src/syntax";
  * not inside a colored expression. Pure lookup on the parse tree held by the
  * state field.
  *
- * Markup inside literal code is a code sample, not markup — live preview
+ * Markup inside literal code is a code sample, not markup. Live preview
  * leaves it alone and so does the auto hexifier, so it is not an expression
  * here either. Answering with it would let the editor commands rewrite the one
  * place the plugin promises never to touch.

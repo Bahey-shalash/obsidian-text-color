@@ -11,15 +11,13 @@ export class MarkerWidget extends WidgetType {
 	/**
 	 * The editor may live in a pop out window; build in its document.
 	 *
-	 * `createElement` rather than obsidian's `createEl` on purpose, and the
-	 * same goes for the other two places that build a detached element
-	 * (`ColorWidget.toDOM` and the reading mode `newSpan`). `createEl` on a
-	 * node appends the result to that node, so `document.createEl` would try
-	 * `document.appendChild` and throw; the global `createEl` builds in the
-	 * main window's document, which loses the pop out this line exists for.
-	 * Neither form can return a detached element in the right document.
+	 * The window form of `createSpan`, and not the node or the global one, for
+	 * the reason `src/obsidian-globals.d.ts` gives: it is the only one that
+	 * returns a detached element in a document other than the main window's.
+	 * The other two places that build one, `ColorWidget.toDOM` and the reading
+	 * mode `newSpan`, go the same way.
 	 */
 	toDOM(view: EditorView): HTMLElement {
-		return view.dom.ownerDocument.createElement("span");
+		return view.dom.ownerDocument.win.createSpan();
 	}
 }

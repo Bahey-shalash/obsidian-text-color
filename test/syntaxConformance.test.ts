@@ -3,7 +3,7 @@
  *
  * Live preview parses an incremental document with a lezer grammar; reading
  * mode walks pre-rendered dom with a pair of regexes. Two mechanisms are
- * unavoidable, one definition is not — and every time they drifted apart, a
+ * unavoidable, one definition is not, and every time they drifted apart, a
  * user found it: a stray `=~` wiping a block, a `}` inside colored text, an
  * empty token, markup inside a code fence. This feeds one corpus through both
  * and asserts they render the same characters in the same colors.
@@ -65,6 +65,15 @@ const CORPUS = [
 	"~={red}=~",
 	"~={red",
 	"trailing ~={red}",
+	// an opening marker with a `=` in front of it: `=~` reads as a closer
+	// sharing the opener's `~`, and whoever takes that character decides
+	// whether there is an expression here at all. The opener takes it, which
+	// is what makes highlighted colored text (`==~={red}x=~==`, obsidian's
+	// own markup) render as a color in both modes rather than as raw markup.
+	"==~={red}a highlight around a color=~==",
+	"x=~={red}an equals in front of the opener=~",
+	"~={red}a=~={blue}b=~",
+	"an equals before an unfinished =~={ token",
 ];
 
 describe("live preview and reading mode agree", () => {

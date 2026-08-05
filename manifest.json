@@ -2,7 +2,7 @@
 	"id": "colors",
 	"name": "Colors",
 	"version": "1.0.1",
-	"minAppVersion": "1.4.0",
+	"minAppVersion": "1.13.0",
 	"description": "Color text with hex-based markup that renders identically in live preview, reading mode and PDF export. Menus map palette names to hex colors; notes store only the hex.",
 	"author": "Bahey Shalash",
 	"authorUrl": "https://github.com/Bahey-shalash",

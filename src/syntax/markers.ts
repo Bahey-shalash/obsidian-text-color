@@ -8,10 +8,10 @@
  * implementations and fails when they drift apart.
  */
 
-/** `~={token}` — the opening marker, token included. */
+/** `~={token}`: the opening marker, token included. */
 export const OPEN = /~=\{[^}\s]+\}/g;
 
-/** `=~` — the closing marker. */
+/** `=~`: the closing marker. */
 export const CLOSE = /=~/g;
 
 /** The literal text an opening marker starts with. */
@@ -19,6 +19,25 @@ export const OPEN_START = "~={";
 
 /** The literal text of a closing marker. */
 export const CLOSE_MARKER = "=~";
+
+/**
+ * Whether the `=~` at this index really closes a color.
+ *
+ * The two markers share the `~`: `=~={red}` is an opening marker with a stray
+ * `=` in front of it, not a closer that happens to be followed by one. That
+ * `=` is not a contrived case: it is what obsidian leaves behind when the
+ * user highlights colored text, since `==~={red}text=~==` puts the first `=`
+ * of the highlight right against the opening marker. Read as a closer it eats
+ * the opener and the whole expression stops existing.
+ *
+ * `parser/closeMarker.ts` is the same rule for the grammar.
+ */
+export function isCloseMarker(text: string, index: number): boolean {
+	// sticky rather than a slice: this is asked per marker while rendering.
+	const opener = new RegExp(OPEN.source, "y");
+	opener.lastIndex = index + 1; // the `~` this closer would take
+	return !opener.test(text);
+}
 
 export interface SyntaxMatch {
 	index: number;

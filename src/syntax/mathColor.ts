@@ -7,7 +7,7 @@ import { HEX_SOURCE } from "src/color/InlineColor";
  * on the line in front of the `$$`, reading mode stops parsing it as math
  * while live preview carries on rendering it, and the two modes disagree about
  * what the note even contains. Latex already knows how to color, so a math
- * block is colored the way a math block is colored — the engine does it, both
+ * block is colored the way a math block is colored: the engine does it, both
  * modes ask the same engine, and there is nothing left to disagree about.
  *
  * `\color` is a switch: it applies to the rest of the group it opens in, which

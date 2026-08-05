@@ -21,7 +21,7 @@ function render(html: string): HTMLElement {
  * Sections obsidian renders itself.
  *
  * This processor runs before the section reaches mathjax or the code
- * highlighter, so the dom holds no `<pre>` or `<code>` to recognise one by —
+ * highlighter, so the dom holds no `<pre>` or `<code>` to recognise one by:
  * only the source says what it is. A span written into a math block becomes
  * part of the latex mathjax is handed, which it renders as a parse error: the
  * whole block comes back as the serialized `<span style="...">` as text.
@@ -155,7 +155,7 @@ describe("a color that outlives the element it opened in", () => {
 
 		const { text, colors } = readColoring(el);
 		expect(text).toBe("a b c d");
-		// "a " red, "b" blue, " c" still blue, " d" back to red — none of it plain
+		// "a " red, "b" blue, " c" still blue, " d" back to red: none of it plain
 		expect(colors).toEqual([
 			"#e93147", "#e93147",
 			"#086ddd",
@@ -204,6 +204,64 @@ describe("token edge cases", () => {
 		const el = render("<p>~={mystery}text=~</p>");
 		expect(el.textContent).toBe("text");
 		expect(el.querySelector("span")?.getAttribute("style")).toBeNull();
+	});
+});
+
+/**
+ * A closing marker obsidian split in two.
+ *
+ * Strikethrough and the closing marker share the `~`. Striking colored text
+ * through writes `~~~={red}text=~~~`, and obsidian's own parser takes the
+ * first two of those three trailing tildes for the `</del>`: the `=` of the
+ * marker stays inside the element and its `~` lands behind it as a sibling,
+ * so neither half holds anything a regex can match. The color used to run on
+ * to the end of the block with both characters on screen, while live preview
+ * (which reads the source, not the dom) rendered the same line correctly.
+ */
+describe("a closing marker split by a strikethrough", () => {
+	test("strikethrough around the color closes it at the element edge", () => {
+		// source: ~~~={red}colored=~~~ end
+		const el = render("<p><del>~={red}colored=</del>~ end</p>");
+
+		expect(el.textContent).toBe("colored end");
+		expect(el.querySelector("del")?.textContent).toBe("colored");
+
+		const { text, colors } = readColoring(el);
+		expect(text).toBe("colored end");
+		expect(colors).toEqual([
+			...new Array("colored".length).fill("#e93147"),
+			...new Array(" end".length).fill(null),
+		]);
+	});
+
+	test("a strikethrough right behind the color is not colored by it", () => {
+		// source: ~={red}colored=~~~struck~~ end
+		const el = render("<p>~={red}colored=<del>~struck</del> end</p>");
+
+		expect(el.textContent).toBe("coloredstruck end");
+		expect(el.querySelector("del")?.textContent).toBe("struck");
+		expect(spanWith(el, "#e93147")?.textContent).toBe("colored");
+
+		const { colors } = readColoring(el);
+		expect(colors.slice("colored".length)).toEqual(
+			new Array("struck end".length).fill(null));
+	});
+
+	test("only a strikethrough splits a marker: italics keep their tilde", () => {
+		// source: ~={red}a=*~b*=~: a `=` at the end of the colored text and
+		// italics that start with a tilde is not a marker obsidian broke.
+		const el = render("<p>~={red}a=<em>~b</em>=~ tail</p>");
+
+		expect(el.textContent).toBe("a=~b tail");
+		expect(el.querySelector("em")?.textContent).toBe("~b");
+		expect(spanWith(el, "#e93147")?.textContent).toBe("a=~b");
+	});
+
+	test("a trailing equals that no tilde follows is ordinary text", () => {
+		const el = render("<p>~={red}a=<strong>b</strong> c=~ tail</p>");
+		// the `=` is content: the color keeps it and closes at its own marker.
+		expect(el.textContent).toBe("a=b c tail");
+		expect(spanWith(el, "#e93147")?.textContent).toBe("a=b c");
 	});
 });
 

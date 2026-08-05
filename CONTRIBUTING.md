@@ -6,8 +6,8 @@ both welcome.
 ## Reporting a bug
 
 Open an issue using the bug report template. The two things that make a report
-actionable are the **markup you typed** and **which mode it rendered wrong in** —
-live preview, reading mode or PDF export — since the three take different code
+actionable are the **markup you typed** and **which mode it rendered wrong in**
+(live preview, reading mode or PDF export), since the three take different code
 paths and a bug in one is usually fine in the others.
 
 ## Getting set up
@@ -45,8 +45,8 @@ npm run grammar
 | Path | What lives there |
 | --- | --- |
 | `src/syntax/` | The markup itself: the grammar's shape, protected blocks, markers |
-| `src/editor/` | Live preview — CodeMirror decorations, widgets, state fields |
-| `src/reading/` | Reading mode and PDF export — the markdown post processor |
+| `src/editor/` | Live preview: CodeMirror decorations, widgets, state fields |
+| `src/reading/` | Reading mode and PDF export: the markdown post processor |
 | `src/color/` | Hex parsing, token resolution and the one style definition |
 | `src/settings/` | Settings, migration between versions, the settings tab |
 | `src/ui/` | Modals: the color suggester, the custom hex picker |
@@ -67,5 +67,5 @@ Two conventions worth knowing before you edit:
 Tests live in `test/` and run under Jest. Renderer tests use jsdom through
 `test/support/dom.ts`, which installs the handful of DOM helpers Obsidian adds
 on top of the standard ones. `test/syntaxConformance.test.ts` asserts that live
-preview and reading mode color the same characters for the same input — if you
+preview and reading mode color the same characters for the same input: if you
 touch either path, that is the test that catches a divergence.

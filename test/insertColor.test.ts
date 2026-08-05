@@ -81,7 +81,7 @@ describe("insertColor with several cursors", () => {
 
 		const pair = OPEN.length + "=~".length;
 		expect(editor.selectionOffsets).toEqual([
-			[0, OPEN.length + 3 + "=~".length],   // the wrapped selection, kept
+			[0, OPEN.length + 3 + "=~".length], // the wrapped selection, kept
 			[7 + pair + OPEN.length, 7 + pair + OPEN.length],
 		]);
 	});
@@ -123,8 +123,8 @@ describe("insertColor as one step", () => {
  * Blocks that render themselves.
  *
  * A code fence belongs to obsidian's highlighter and is passed straight
- * through. A math block cannot take the markup at all — a marker in front of
- * its `$$` and reading mode stops seeing math — so it is colored in latex,
+ * through. A math block cannot take the markup at all: a marker in front of
+ * its `$$` and reading mode stops seeing math, so it is colored in latex,
  * which both renderers hand to the same engine.
  */
 describe("insertColor around blocks", () => {

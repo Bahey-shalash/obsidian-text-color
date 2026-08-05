@@ -53,37 +53,51 @@ export interface MigrationResult {
 	settings: FastTextColorPluginSettings;
 	/** palette names dropped because their value is not a color */
 	dropped: string[];
+	/** `was -> is` for every duplicate palette name that had to be renamed */
+	renamed: string[];
 }
 
 /**
  * Bring whatever is on disk up to the current model. The plugin has its own
  * id and therefore its own data folder, so there is no old-version data to
- * migrate — this is a sanitizer: what comes out is the current shape, every
+ * migrate: this is a sanitizer: what comes out is the current shape, every
  * hex is canonical, and anything that is not a color is dropped and reported
  * rather than stored. (A retired `legacy` map from before the compatibility
  * layer was removed is simply ignored; the next save cleans it from disk.)
  */
 export function migrateSettings(raw: unknown): MigrationResult {
 	if (raw == null || typeof raw != "object") {
-		return { settings: structuredClone(DEFAULT_SETTINGS), dropped: [] };
+		return { settings: structuredClone(DEFAULT_SETTINGS), dropped: [], renamed: [] };
 	}
 
 	const record = raw as Record<string, unknown>;
 	const dropped: string[] = [];
+	const renamed: string[] = [];
 
 	return {
 		settings: {
 			version: SETTINGS_VERSION,
-			palette: sanitizePalette(record.palette, dropped),
+			palette: sanitizePalette(record.palette, dropped, renamed),
 			interactiveDelimiters: record.interactiveDelimiters !== false,
 			colorCodeSection: record.colorCodeSection === true,
 		},
 		dropped,
+		renamed,
 	};
 }
 
-/** A hand edited data.json must not smuggle non-colors past the boundary. */
-function sanitizePalette(raw: unknown, dropped: string[]): PaletteColor[] {
+/**
+ * A hand edited data.json must not smuggle non-colors past the boundary.
+ *
+ * Names have to come out unique as well as present. Two entries under one name
+ * leave the second one unreachable (resolving a name takes the first match, so
+ * typing it silently gets the other hex) and the settings tab identifies a row
+ * by its name, so a duplicate would have two rows claiming to be the same one.
+ * The settings tab refuses to create one; this is the same rule applied to what
+ * arrives from disk. The color is kept and renamed rather than dropped: it is
+ * still a color the user picked, and it stays where it was in the menus.
+ */
+function sanitizePalette(raw: unknown, dropped: string[], renamed: string[]): PaletteColor[] {
 	if (!Array.isArray(raw)) {
 		return structuredClone(DEFAULT_SETTINGS.palette);
 	}
@@ -97,6 +111,12 @@ function sanitizePalette(raw: unknown, dropped: string[]): PaletteColor[] {
 		const hex = parseHex((entry as PaletteColor)?.hex);
 		if (hex == null) {
 			dropped.push(name);
+			continue;
+		}
+		if (palette.some(c => c.name === name)) {
+			const free = nextFreeName(palette);
+			renamed.push(`${name} -> ${free}`);
+			palette.push({ name: free, hex });
 			continue;
 		}
 		palette.push({ name, hex });

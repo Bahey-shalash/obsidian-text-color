@@ -12,7 +12,7 @@
  * A display math block belongs to mathjax, and it only *is* a math block while
  * its `$$` has the line to itself. Put one marker in front of it and reading
  * mode stops parsing it as math at all, while live preview carries on
- * rendering it — which is how a colored math block ends up looking right in
+ * rendering it, which is how a colored math block ends up looking right in
  * one mode and like raw latex in the other.
  */
 
@@ -34,7 +34,7 @@ const CODE_FENCE = /^(`{3,}|~{3,})/;
  * being reinterpreted as text.
  *
  * An unclosed `$$` is the other way round. Obsidian renders it as the literal
- * text it is, so it is not a block and protects nothing — and it must not be,
+ * text it is, so it is not a block and protects nothing, and it must not be,
  * because a line like `$$5 and rising` opens one. Protecting to the end of the
  * document would put every line behind a price out of the coloring's reach.
  */
@@ -91,7 +91,7 @@ export function overlapsProtectedBlock(blocks: ProtectedBlock[], from: number, t
  * inside a document, and it has to ask about the source: the post processor
  * runs before obsidian has handed the section to mathjax or to the code
  * highlighter, so there is no `<pre>` or `<code>` in the dom yet to recognise
- * it by. Anything written into one of these comes back out as escaped text —
+ * it by. Anything written into one of these comes back out as escaped text:
  * mathjax renders it as a parse error, the highlighter as literal source.
  */
 export function isSelfRenderingSource(source: string): boolean {

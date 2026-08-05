@@ -15,7 +15,7 @@ export function isLiteralColor(token: string): boolean {
 
 /**
  * The one gate every hex passes through. Accepts a hex with or without the
- * leading `#`, in any case, and answers with the canonical lowercase form —
+ * leading `#`, in any case, and answers with the canonical lowercase form,
  * or null for anything that is not a hex color at all.
  *
  * Everything that ends up in a style attribute comes through here, which is

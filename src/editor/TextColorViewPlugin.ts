@@ -56,8 +56,8 @@ class TextColorViewPlugin implements PluginValue {
 		this.decorations = buildTextColorDecorations(view.state, view.visibleRanges);
 
 		this.mathObserver = new MutationObserver((records) => {
-			// only rendered math matters. Every other insertion — typing,
-			// scrolling, obsidian's own widgets — would otherwise pay for a
+			// only rendered math matters. Every other insertion (typing,
+			// scrolling, obsidian's own widgets) would otherwise pay for a
 			// query over the whole content dom.
 			if (records.some(addsMath)) {
 				this.scheduleMathPass(view);

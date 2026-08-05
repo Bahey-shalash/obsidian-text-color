@@ -44,7 +44,7 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 	 * mode skips a whole section that renders itself, so decorating inside one
 	 * here is how the two modes end up disagreeing about a `$$` block.
 	 *
-	 * Resolved once for the expression rather than per node — this runs on every
+	 * Resolved once for the expression rather than per node: this runs on every
 	 * cursor move, once per visible expression, and the walk asks per node.
 	 */
 	const block = state.field(textColorParserField).blocks
@@ -146,7 +146,7 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 			// a complete but empty colored section: TcLeft immediately
 			// followed by REnd. The syntax says that is markup, so it is
 			// decorated like any other expression and its markers are
-			// hidden — otherwise reading mode and live preview show a
+			// hidden, otherwise reading mode and live preview show a
 			// different number of characters for the same source.
 			case "Unfinished":
 			case "Expression":
@@ -202,7 +202,7 @@ export function decorateExpression(expression: SyntaxNodeRef, builder: RangeSetB
 				// only a section that closes its backtick is literal code, and
 				// only that is left alone. An unbalanced one is plain text in
 				// obsidian (#41), and the grammar swallows the rest of the line
-				// into it — the enclosing color's closing marker included — so
+				// into it, the enclosing color's closing marker included, so
 				// skipping it left that marker on screen and the color running
 				// on past its own end.
 				if (!shouldDescendInto(node, sliceDoc)) {

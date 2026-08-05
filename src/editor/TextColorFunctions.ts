@@ -31,7 +31,7 @@ interface Edit {
  * undo, not one step per cursor. Every change is expressed against the
  * untouched document, which is what keeps them independent of each other.
  *
- * Code and display math blocks are routed around rather than written into —
+ * Code and display math blocks are routed around rather than written into;
  * see `syntax/blocks.ts` for why neither survives a marker. A line inside one
  * is left exactly as it was, so a selection that runs across a block still
  * colors the prose on either side of it.
@@ -65,7 +65,7 @@ export function insertColor(hex: string, editor: Editor): void {
 		// silent when the selection simply already reads this way; a block is
 		// the only reason worth explaining, because the click looked ignored.
 		if (edits.some(edit => overlapsProtectedBlock(blocks, edit.from, edit.to))) {
-			new Notice("Nothing to color: code blocks keep their own highlighting, and a math block takes its color in latex.");
+			new Notice("Nothing to color: code blocks keep their own highlighting, and a math block takes its color in LaTeX.");
 		}
 		return;
 	}
@@ -107,7 +107,7 @@ function positionAt(text: string, offset: number): EditorPosition {
  *
  * A line a block owns is not fenced. A code block keeps its own rendering and
  * is passed through untouched; a math block is colored in latex instead, which
- * is the only way to color one that both modes agree on — see
+ * is the only way to color one that both modes agree on; see
  * `syntax/mathColor.ts`.
  *
  * `start` is where `text` sits in the document, which is what lets each line be

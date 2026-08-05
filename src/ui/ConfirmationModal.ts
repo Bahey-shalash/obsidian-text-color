@@ -3,8 +3,8 @@ import { App, Modal, Setting } from "obsidian";
 /**
  * Yes/no, as a promise.
  *
- * Every way out of a modal — the buttons, Escape, a click outside, the close
- * button — ends in `onClose`, so that is the single place the promise is
+ * Every way out of a modal (the buttons, Escape, a click outside, the close
+ * button) ends in `onClose`, so that is the single place the promise is
  * settled. Anything else has to be kept in sync with obsidian's dismissal
  * paths, and the paths it misses hang the caller forever.
  */

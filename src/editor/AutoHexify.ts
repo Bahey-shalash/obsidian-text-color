@@ -20,7 +20,7 @@ export interface NameConversion {
  *
  * Literal code is never touched. This is the one consumer of the syntax that
  * writes to the user's file, so it uses the same rule the live preview uses
- * to decide what is code — markup inside a code fence is a code sample, not
+ * to decide what is code: markup inside a code fence is a code sample, not
  * markup, and silently rewriting it is the worst thing this plugin could do.
  */
 export function findNameConversions(
@@ -125,14 +125,14 @@ export const autoHexify = EditorView.updateListener.of((update: ViewUpdate) => {
 				return;
 			}
 			// an undo step of its own. Keeping it out of the history does not
-			// fold it into the keystroke that triggered it — codemirror only
-			// maps unrecorded changes forward — so undo would revert the
+			// fold it into the keystroke that triggered it, codemirror only
+			// maps unrecorded changes forward, so undo would revert the
 			// keystroke and leave the hex behind, with the name the user typed
 			// unrecoverable. The `isHistoryUpdate` guard above is what stops
 			// undoing this step from immediately reapplying it.
 			update.view.dispatch({ changes: conversions });
 		} catch (e) {
-			console.error(`colors: auto hexify failed: ${e}`);
+			console.error("colors: auto hexify failed:", e);
 		}
 	});
 });

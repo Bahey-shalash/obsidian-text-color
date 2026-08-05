@@ -19,9 +19,16 @@ Text { Word | Word? (CodeSection Word?)+ }
 
 Word { char+ }
 
+// `=~` is read by hand because the marker it closes can be standing right
+// behind it: in `==~={red}text=~==` the `=` obsidian's highlight leaves in
+// front of the opening marker pairs with that marker's own `~` into a perfect
+// `=~`, and a plain token rule takes it: opener gone, the whole expression
+// with it. The tokenizer below refuses a `=~` whose `~` starts a `~={`, which
+// is the same rule `markers.ts` applies to the reading mode regexes.
+@external tokens closeMarker from "./closeMarker" { RMarker }
+
 @tokens {
   LMarker { "~={" }
-  RMarker { "=~" }
   EOF { @eof }
   ENDLN { "\n\n" }
 
@@ -31,8 +38,6 @@ Word { char+ }
 
   esc  { $["\\\/bfnrt] | "u" hex hex hex hex }
   hex  { $[0-9a-fA-F] }
-
-  @precedence { LMarker, RMarker }
 }
 
 @local tokens {

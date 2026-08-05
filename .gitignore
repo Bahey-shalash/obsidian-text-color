@@ -1,6 +1,6 @@
 # vscode
 .vscode 
-
+.claude
 # Intellij
 *.iml
 .idea

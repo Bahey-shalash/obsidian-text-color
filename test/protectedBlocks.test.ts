@@ -1,6 +1,6 @@
 /**
  * Which blocks the coloring has to route around. A marker written into one of
- * these does not just look wrong — it takes the block's own rendering with it:
+ * these does not just look wrong. It takes the block's own rendering with it:
  * a code fence loses its syntax highlighting, and a `$$` that no longer starts
  * its line stops being math in reading mode while live preview carries on
  * rendering it.
@@ -95,7 +95,7 @@ describe("overlapsProtectedBlock", () => {
 
 /**
  * An unclosed `$$` is not a math block. Obsidian renders it as the literal
- * text it is, and a line like `$$5 and rising` opens one — protecting to the
+ * text it is, and a line like `$$5 and rising` opens one: protecting to the
  * end of the document would put every line behind a price out of reach.
  */
 describe("an unclosed $$ is not a block", () => {

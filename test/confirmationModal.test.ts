@@ -7,8 +7,8 @@ import { confirmByModal } from "src/ui/ConfirmationModal";
  *
  * It used to settle only on the two buttons, while a polling loop waited for
  * a flag those buttons set. Escape, a click outside and the titlebar close
- * button all bypass them, so any of those left the caller — "convert the
- * entire vault", every palette delete — suspended forever, with a 60 Hz timer
+ * button all bypass them, so any of those left the caller ("convert the
+ * entire vault", every palette delete) suspended forever, with a 60 Hz timer
  * still running for the rest of the session.
  */
 describe("confirmByModal", () => {

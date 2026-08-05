@@ -1,4 +1,4 @@
-import { CLOSE, OPEN } from "src/syntax/markers";
+import { CLOSE, OPEN, isCloseMarker } from "src/syntax/markers";
 import { overlapsProtectedBlock, protectedBlocks } from "src/syntax/blocks";
 
 /**
@@ -7,7 +7,7 @@ import { overlapsProtectedBlock, protectedBlocks } from "src/syntax/blocks";
  * Reading mode is handed one section at a time, so on its own it cannot tell a
  * closing marker that belongs to an opener further up from a stray one the
  * user typed. Live preview parses the whole document and can, and the two have
- * to agree about which markers are markup — otherwise a color spanning a code
+ * to agree about which markers are markup, otherwise a color spanning a code
  * block leaves a `=~` on screen in one mode and not the other.
  *
  * The scan starts at the last blank line, which is where the grammar starts
@@ -21,19 +21,21 @@ export function colorOpenBefore(source: string, upTo: number): boolean {
 	const blocks = protectedBlocks(source);
 	const from = lastBlankLineBefore(source, upTo);
 
-	const counted = (regex: RegExp): number => {
+	const counted = (regex: RegExp, isMarker: (index: number) => boolean): number => {
 		const fresh = new RegExp(regex.source, "g");
 		fresh.lastIndex = from;
 		let count = 0;
 		for (let m = fresh.exec(source); m != null && m.index < upTo; m = fresh.exec(source)) {
-			if (!overlapsProtectedBlock(blocks, m.index, m.index + m[0].length)) {
+			if (isMarker(m.index) && !overlapsProtectedBlock(blocks, m.index, m.index + m[0].length)) {
 				count++;
 			}
 		}
 		return count;
 	};
 
-	return counted(OPEN) > counted(CLOSE);
+	// a `=~` sharing its `~` with the opener behind it closes nothing, here as
+	// everywhere else; counting it would balance an opener that is still open.
+	return counted(OPEN, () => true) > counted(CLOSE, index => isCloseMarker(source, index));
 }
 
 /** Where the run of lines containing `upTo` begins: just after the last blank line. */

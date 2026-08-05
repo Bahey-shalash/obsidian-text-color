@@ -13,7 +13,7 @@ import { CustomColorModal } from "src/ui/CustomColorModal";
  * selects the token, hovering opens the palette to swap or remove the color.
  *
  * The widget holds no position it does not compare in `eq()`. Codemirror
- * keeps the dom — and with it the handler closures — of a widget that
+ * keeps the dom, and with it the handler closures, of a widget that
  * compares equal, so a field left out of `eq()` is a field that goes stale;
  * the enclosing expression is therefore looked up from the current state at
  * click time rather than captured when the decoration was built.
@@ -39,8 +39,9 @@ export class ColorWidget extends WidgetType {
 	toDOM(view: EditorView): HTMLElement {
 		const doc = view.dom.ownerDocument;
 
-		// createElement, not createEl; see MarkerWidget.toDOM for why.
-		const swatch = doc.createElement("span");
+		// the window's createSpan, not the node or the global one; see
+		// MarkerWidget.toDOM for why.
+		const swatch = doc.win.createSpan();
 		if (this.hex != null) {
 			// the swatch fills itself with the color; it does not carry text.
 			swatch.setCssProps(colorProps(this.hex));
@@ -102,7 +103,7 @@ export class ColorWidget extends WidgetType {
 	}
 
 	/**
-	 * The custom picker for an already colored section — the context menu has
+	 * The custom picker for an already colored section: the context menu has
 	 * it, so the swatch menu must not offer less. The sample is read from the
 	 * current state at click time; the range being replaced is the token this
 	 * widget decorates, same as the palette entries above.

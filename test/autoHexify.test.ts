@@ -56,8 +56,8 @@ describe("findNameConversions", () => {
 
 /**
  * This is the only part of the plugin that writes to the user's file on its
- * own. Markup inside a code fence is a code sample — most likely someone
- * documenting this very syntax — and rewriting it as they type is the worst
+ * own. Markup inside a code fence is a code sample, most likely someone
+ * documenting this very syntax, and rewriting it as they type is the worst
  * thing the plugin could do. It uses the same rule live preview uses.
  */
 describe("literal code is never rewritten", () => {

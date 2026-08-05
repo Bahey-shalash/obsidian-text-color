@@ -49,7 +49,7 @@ export const textColorParserField: StateField<ParsedDocument> = StateField.defin
  * One parse of the document, with its blocks found on first ask and kept.
  *
  * The block scan needs the document flat, and this field is rebuilt on every
- * keystroke — the incremental parse above is handed a `DocInput` precisely so
+ * keystroke: the incremental parse above is handed a `DocInput` precisely so
  * it never has to flatten anything, and scanning eagerly here would undo that
  * for every document, colored or not. Nothing asks for the blocks until a
  * colored expression is decorated or a coloring command runs, so a note with no

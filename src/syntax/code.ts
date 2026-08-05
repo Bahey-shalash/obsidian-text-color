@@ -5,7 +5,7 @@ import { SyntaxNode, SyntaxNodeRef, Tree } from "@lezer/common";
  *
  * One rule, three consumers. The live preview decorator, the auto-hexifier
  * (which writes to the user's file) and the reading mode renderer all ask
- * this module instead of each carrying their own idea of what code is —
+ * this module instead of each carrying their own idea of what code is:
  * that divergence is how markup inside a code fence used to get rewritten.
  */
 
@@ -42,7 +42,7 @@ export function isInsideLiteralCode(tree: Tree, sliceDoc: SliceDoc, pos: number)
 
 /**
  * Is this node inside a code section that renders as literal code? The node
- * form, for callers that already hold one — a position would have to be picked
+ * form, for callers that already hold one: a position would have to be picked
  * out of it, and the boundaries are exactly where that gets ambiguous.
  */
 export function isLiteralCodeNode(node: SyntaxNode | null, sliceDoc: SliceDoc): boolean {

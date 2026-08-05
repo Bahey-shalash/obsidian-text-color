@@ -3,7 +3,7 @@
  *
  * `syntaxConformance.test.ts` checks what ends up on screen; this checks that
  * the walk stays inside the expression it was handed. A walk that runs on into
- * the following siblings still produces the right pixels — it decorates the
+ * the following siblings still produces the right pixels: it decorates the
  * next expression early, and the builder then throws on the duplicate, which
  * `buildTextColorDecorations` catches and logs. Right by accident, and only
  * until the layout changes, so it is asserted directly here.
@@ -97,7 +97,7 @@ describe("decorateExpression stays inside its expression", () => {
 /**
  * Only a code section that closes its backtick is literal code. An unbalanced
  * one is plain text in obsidian, and the grammar puts the whole rest of the
- * line inside it — the enclosing color's closing marker included. Skipping it
+ * line inside it: the enclosing color's closing marker included. Skipping it
  * left that `=~` on screen and the color running on past its own end, which
  * `syntaxConformance.test.ts` catches as the two renderers disagreeing; the
  * `colorCodeSection` half of the rule is not expressible there, so it is here.
@@ -180,6 +180,42 @@ function stylesOf(set: ReturnType<typeof buildTextColorDecorations>, length: num
 	});
 	return hexes;
 }
+
+/**
+ * `=~` and `~={` want the same `~`.
+ *
+ * Obsidian's own markup is what puts them next to each other: highlighting
+ * colored text writes `==~={red}text=~==`, where the first `=` of the
+ * highlight sits against the opening marker. Taking that `~` for a closing
+ * marker deletes the opener, and live preview showed the raw markup while
+ * reading mode (which never sees the `==`, obsidian having consumed it)
+ * rendered the color. The opener takes it; see `parser/closeMarker.ts`.
+ */
+describe("an equals in front of an opening marker", () => {
+	test("a highlight around the markup still colors", () => {
+		expect(renderedOf("lead ==~={red}hello=~== trail")).toEqual([
+			'"~={red}" hidden',
+			`"hello" ${RED}`,
+			'"=~" hidden',
+		]);
+	});
+
+	test("a plain equals in front of the opener is ordinary text", () => {
+		expect(renderedOf("lead x=~={red}hello=~ trail")).toEqual([
+			'"~={red}" hidden',
+			`"hello" ${RED}`,
+			'"=~" hidden',
+		]);
+	});
+
+	test("a real closing marker is still one", () => {
+		expect(renderedOf("lead ~={red}hello=~=~ trail")).toEqual([
+			'"~={red}" hidden',
+			`"hello" ${RED}`,
+			'"=~" hidden',
+		]);
+	});
+});
 
 /**
  * Blocks that render themselves, in the decorator.
