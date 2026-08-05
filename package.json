@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-colors",
-	"version": "1.0.1",
+	"version": "1.1.0",
 	"description": "Color text in Obsidian with hex-based markup; lean fork of Fast Text Color",
 	"main": "main.js",
 	"scripts": {
